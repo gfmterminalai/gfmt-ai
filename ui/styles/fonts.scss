@@ -1,0 +1,104 @@
+/* Terminal Fonts */
+@font-face {
+  font-family: 'BerkeleyMono';
+  src: url('/fonts/TX-02-Regular.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BerkeleyMono';
+  src: url('/fonts/TX-02-Bold.otf') format('opentype');
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BerkeleyMono';
+  src: url('/fonts/TX-02-Oblique.otf') format('opentype');
+  font-weight: normal;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BerkeleyMono';
+  src: url('/fonts/TX-02-Bold-Oblique.otf') format('opentype');
+  font-weight: bold;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'CommitMono';
+  src: url('/fonts/CommitMono-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'DepartureMono';
+  src: url('/fonts/DepartureMono-Regular.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'FragmentMono';
+  src: url('/fonts/FragmentMono-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'GeistMono';
+  src: url('/fonts/GeistMono-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'IosevkaTerm';
+  src: url('/fonts/IosevkaTerm-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'SFMonoSquare';
+  src: url('/fonts/SFMonoSquare-Regular.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'ServerMono';
+  src: url('/fonts/ServerMono-Regular.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --font-mono-berkeley: 'BerkeleyMono', monospace;
+  --font-mono-commit: 'CommitMono', monospace;
+  --font-mono-departure: 'DepartureMono', monospace;
+  --font-mono-fragment: 'FragmentMono', monospace;
+  --font-mono-geist: 'GeistMono', monospace;
+  --font-mono-iosevka: 'IosevkaTerm', monospace;
+  --font-mono-sfmono: 'SFMonoSquare', monospace;
+  --font-mono-server: 'ServerMono', monospace;
+  
+  /* Default font stack */
+  --font-mono: var(--font-mono-berkeley), var(--font-mono-geist), var(--font-mono-commit), var(--font-mono-sfmono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  --font-body: var(--font-mono);
+  --font-heading: var(--font-mono);
+} 

@@ -1,0 +1,17 @@
+@import '@agent/ui/global.scss';
+
+:root {
+  --system-font-stack: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-family-mono: var(--system-font-stack);
+  --font-family-body: var(--system-font-stack);
+}
+
+body {
+  font-family: var(--font-family-mono);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  background: var(--main-background);
+  color: var(--main-text);
+  margin: 0;
+  padding: 0;
+} 
