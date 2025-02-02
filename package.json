@@ -1,27 +1,32 @@
 {
   "name": "gfm-terminal",
   "version": "1.0.0",
-  "description": "GoFundMeme Terminal - A tool for scraping and analyzing meme coins",
+  "description": "GFM Terminal - Backend API and Services",
   "main": "dist/index.js",
-  "type": "module",
+  "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "ts-node-dev --respawn src/index.ts",
+    "test": "jest"
   },
   "dependencies": {
-    "@commander-js/extra-typings": "^13.1.0",
-    "@supabase/supabase-js": "^2.48.1",
-    "dotenv": "^16.4.5",
-    "puppeteer": "^19.11.1"
+    "@supabase/supabase-js": "^2.39.3",
+    "axios": "^1.6.5",
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.1",
+    "express": "^4.18.2"
   },
   "devDependencies": {
-    "@types/dotenv": "^8.2.3",
-    "@types/node": "^20.11.24",
-    "@types/puppeteer": "^5.4.7",
-    "ts-node": "^10.9.2",
-    "turbo": "^1.13.4",
+    "@types/body-parser": "^1.19.5",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.11",
+    "@types/node": "^20.11.10",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
+    "ts-node-dev": "^2.0.0",
     "typescript": "^5.3.3"
   }
 }
