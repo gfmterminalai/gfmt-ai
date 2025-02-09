@@ -14,6 +14,5 @@
     { "source": "/api/sync", "destination": "/src/api/routes/sync" }
   ],
   "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "nodeVersion": "18.x"
+  "outputDirectory": "dist"
 } 
