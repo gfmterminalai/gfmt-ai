@@ -2,7 +2,7 @@ import { SyncService } from '../src/api/services/SyncService';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export const config = {
-  runtime: 'nodejs18',
+  runtime: 'nodejs18'
 };
 
 export default async function handler(
@@ -26,7 +26,7 @@ export default async function handler(
     console.error('Sync endpoint error:', error);
     return res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred'
+      error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 } 
