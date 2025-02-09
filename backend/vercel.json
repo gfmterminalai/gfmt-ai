@@ -9,7 +9,8 @@
     "SUPABASE_URL": "@supabase_url",
     "SUPABASE_ANON_KEY": "@supabase_anon_key",
     "RESEND_API_KEY": "@resend_api_key",
-    "VERCEL_AUTH_TOKEN": "@vercel_auth_token"
+    "VERCEL_AUTH_TOKEN": "@vercel_auth_token",
+    "VERCEL_URL": "https://gfm-terminal.vercel.app"
   },
   "buildCommand": "rm -rf node_modules && npm install --legacy-peer-deps && npm run build",
   "outputDirectory": "dist"
