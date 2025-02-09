@@ -250,4 +250,103 @@ export class DatabaseAdapter {
     if (error) throw error;
     return data;
   }
+
+  async getMemeCoinsPaginated(limit: number = 10, offset: number = 0): Promise<MemeCoin[]> {
+    const { data, error } = await this.client
+      .from('meme_coins')
+      .select('*')
+      .range(offset, offset + limit - 1)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  }
+
+  async getMemeCoinsByDev(developerAddress: string): Promise<MemeCoin[]> {
+    const { data, error } = await this.client
+      .from('meme_coins')
+      .select('*')
+      .eq('developer_address', developerAddress)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  }
+
+  async insertMemeCoin(memeCoin: Partial<MemeCoin>): Promise<MemeCoin> {
+    const { data, error } = await this.client
+      .from('meme_coins')
+      .insert(memeCoin)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async updateMemeCoin(contractAddress: string, updates: Partial<MemeCoin>): Promise<MemeCoin> {
+    const { data, error } = await this.client
+      .from('meme_coins')
+      .update(updates)
+      .eq('contract_address', contractAddress)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async getDevelopersPaginated(limit: number = 10, offset: number = 0): Promise<Developer[]> {
+    const { data, error } = await this.client
+      .from('developers')
+      .select('*')
+      .range(offset, offset + limit - 1)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  }
+
+  async getTopDevelopers(limit: number = 10): Promise<Developer[]> {
+    const { data, error } = await this.client
+      .from('developers')
+      .select('*')
+      .order('reputation', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+    return data || [];
+  }
+
+  async getDevelopersByReputation(limit: number = 10): Promise<Developer[]> {
+    const { data, error } = await this.client
+      .from('developers')
+      .select('*')
+      .order('reputation', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+    return data || [];
+  }
+
+  async searchDevelopers(query: string): Promise<Developer[]> {
+    const { data, error } = await this.client
+      .from('developers')
+      .select('*')
+      .or(`address.ilike.%${query}%,name.ilike.%${query}%`)
+      .order('reputation', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  }
+
+  async getDevStats(): Promise<any> {
+    const { data, error } = await this.client
+      .from('developer_stats')
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
 } 

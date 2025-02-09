@@ -1,4 +1,4 @@
-import { FirecrawlExtraction } from '../../clients/firecrawl';
+import { FirecrawlExtraction } from '../../types/firecrawl';
 
 export interface CampaignFilters {
   developerAddress?: string;
@@ -6,7 +6,6 @@ export interface CampaignFilters {
   endDate?: Date;
   minMarketCap?: number;
   maxMarketCap?: number;
-  status?: 'active' | 'completed' | 'failed';
 }
 
 export interface BatchResult {

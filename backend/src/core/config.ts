@@ -7,9 +7,11 @@ dotenv.config();
 const configSchema = z.object({
   PORT: z.coerce.number().default(3000),
   FIRECRAWL_API_KEY: z.string(),
-  SUPABASE_URL: z.string().optional(),
-  SUPABASE_ANON_KEY: z.string().optional(),
-  RESEND_API_KEY: z.string().default('re_XcTeQX4t_3KQnDoRrhMJtk4iECb2U9w6F')
+  SUPABASE_URL: z.string(),
+  SUPABASE_ANON_KEY: z.string(),
+  SUPABASE_PROJECT_ID: z.string().optional(),
+  SUPABASE_ACCESS_TOKEN: z.string().optional(),
+  RESEND_API_KEY: z.string()
 });
 
 export const config = configSchema.parse({
@@ -17,6 +19,8 @@ export const config = configSchema.parse({
   FIRECRAWL_API_KEY: process.env.FIRECRAWL_API_KEY,
   SUPABASE_URL: process.env.SUPABASE_URL,
   SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
+  SUPABASE_PROJECT_ID: process.env.SUPABASE_PROJECT_ID,
+  SUPABASE_ACCESS_TOKEN: process.env.SUPABASE_ACCESS_TOKEN,
   RESEND_API_KEY: process.env.RESEND_API_KEY
 });
 

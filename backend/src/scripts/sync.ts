@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { FirecrawlClient } from '../clients/firecrawl';
+import { FirecrawlExtraction } from '../types/firecrawl';
 import { config } from '../config';
 
 async function main() {
@@ -69,7 +70,7 @@ async function main() {
       // Insert new campaigns
       for (const extraction of newExtractions) {
         try {
-          if (!extraction.contract_address) {
+          if (!extraction.json.contract_address) {
             results.skipped++;
             continue;
           }
@@ -78,17 +79,16 @@ async function main() {
           const { error: insertError } = await supabase
             .from('meme_coins')
             .insert({
-              contract_address: extraction.contract_address,
-              developer_address: extraction.developer_address,
-              ticker: extraction.ticker,
-              supply: extraction.supply,
-              market_cap_on_launch: extraction.market_cap_on_launch,
-              created_at: extraction.created_at,
-              avatar_url: extraction.avatar_url
+              contract_address: extraction.json.contract_address,
+              developer_address: extraction.json.developer_address,
+              ticker: extraction.json.ticker,
+              supply: extraction.json.supply,
+              market_cap_on_launch: extraction.json.market_cap_on_launch,
+              created_at: new Date(extraction.json.created_at)
             });
 
           if (insertError) {
-            console.error(`Failed to insert campaign ${extraction.contract_address}:`, insertError);
+            console.error(`Failed to insert campaign ${extraction.json.contract_address}:`, insertError);
             results.errors++;
             continue;
           }
@@ -97,7 +97,7 @@ async function main() {
 
           // Insert token distributions
           const combinedDistributions = new Map<string, number>();
-          extraction.token_distribution?.forEach(dist => {
+          extraction.json.token_distribution?.forEach(dist => {
             if (dist.entity && dist.percentage) {
               const currentTotal = combinedDistributions.get(dist.entity) || 0;
               combinedDistributions.set(dist.entity, currentTotal + dist.percentage);
@@ -108,19 +108,19 @@ async function main() {
             const { error: distError } = await supabase
               .from('token_distributions')
               .insert({
-                contract_address: extraction.contract_address,
+                contract_address: extraction.json.contract_address,
                 entity,
                 percentage
               });
 
             if (distError) {
-              console.error(`Failed to insert distribution for ${extraction.contract_address} (${entity}):`, distError);
+              console.error(`Failed to insert distribution for ${extraction.json.contract_address} (${entity}):`, distError);
             } else {
               results.distributions_added++;
             }
           }
 
-          existingAddresses.add(extraction.contract_address);
+          existingAddresses.add(extraction.json.contract_address);
           results.processed++;
           
         } catch (error) {
@@ -159,14 +159,14 @@ async function main() {
 
       for (const extraction of distributionExtractions) {
         try {
-          if (!extraction.contract_address || !extraction.token_distribution?.length) {
+          if (!extraction.json.contract_address || !extraction.json.token_distribution?.length) {
             results.skipped++;
             continue;
           }
 
           // Combine token distributions
           const combinedDistributions = new Map<string, number>();
-          extraction.token_distribution.forEach(dist => {
+          extraction.json.token_distribution.forEach(dist => {
             if (dist.entity && dist.percentage) {
               const currentTotal = combinedDistributions.get(dist.entity) || 0;
               combinedDistributions.set(dist.entity, currentTotal + dist.percentage);
@@ -178,13 +178,13 @@ async function main() {
             const { error: distError } = await supabase
               .from('token_distributions')
               .insert({
-                contract_address: extraction.contract_address,
+                contract_address: extraction.json.contract_address,
                 entity,
                 percentage
               });
 
             if (distError) {
-              console.error(`Failed to insert distribution for ${extraction.contract_address} (${entity}):`, distError);
+              console.error(`Failed to insert distribution for ${extraction.json.contract_address} (${entity}):`, distError);
             } else {
               results.distributions_updated++;
             }

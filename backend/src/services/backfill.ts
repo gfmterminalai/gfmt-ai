@@ -1,6 +1,6 @@
 import { FirecrawlClient } from '../clients/firecrawl';
 import { DatabaseAdapter } from '../core/database';
-import { Campaign } from '../types/database';
+import { Campaign } from '../types/campaign';
 
 export class BackfillService {
   constructor(
@@ -30,8 +30,16 @@ export class BackfillService {
           // Process each campaign
           for (const data of extractedData) {
             try {
+              // Transform social links to expected format
+              const socialLinks = {
+                twitter: data.json.social_links.find(url => url.includes('twitter.com')),
+                telegram: data.json.social_links.find(url => url.includes('t.me')),
+                discord: data.json.social_links.find(url => url.includes('discord.com'))
+              };
+
               // Create campaign record
-              const campaign: Partial<Campaign> = {
+              const campaign: Campaign = {
+                id: data.json.contract_address,
                 contract_address: data.json.contract_address,
                 gofundmeme_url: data.metadata.sourceURL,
                 ticker: data.json.ticker,
@@ -40,7 +48,7 @@ export class BackfillService {
                 metadata: {
                   title: data.json.title,
                   description: data.json.description,
-                  social_links: data.json.social_links
+                  social_links: socialLinks
                 }
               };
 
@@ -58,12 +66,12 @@ export class BackfillService {
                 });
                 console.log('Created At:', data.json.created_at);
                 console.log('Title:', data.json.title);
-                console.log('Social Links:', data.json.social_links.join(', '));
+                console.log('Social Links:', JSON.stringify(socialLinks, null, 2));
                 console.log('=== END EXTRACTED DATA ===\n');
               } else {
                 // Save campaign and related data
                 await this.db.transaction(async (trx) => {
-                  await this.db.createCampaign(campaign, trx);
+                  await this.db.createCampaign(campaign);
                   await this.db.processFirecrawlData(data, trx);
                 });
                 console.log(`Successfully processed campaign: ${campaign.contract_address}`);

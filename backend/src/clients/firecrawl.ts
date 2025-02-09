@@ -1,21 +1,5 @@
 import FireCrawlApp from '@mendable/firecrawl-js';
-import { z } from 'zod';
-
-export interface FirecrawlExtraction {
-  avatar_url: string | null;
-  contract_address: string | null;
-  ticker: string | null;
-  supply: number | null;
-  developer_address: string | null;
-  token_distribution: Array<{
-    entity: string | null;
-    percentage: number | null;
-  }> | null;
-  market_cap_on_launch: number | null;
-  created_at: string | null;
-  title: string | null;
-  social_links: string[] | null;
-}
+import { FirecrawlExtraction, FirecrawlExtractionJson, FirecrawlMetadata } from '../types/firecrawl';
 
 export class FirecrawlClient {
   private app: any;
@@ -52,6 +36,33 @@ export class FirecrawlClient {
     }
   }
 
+  private transformExtraction(rawData: Record<string, any>): FirecrawlExtraction {
+    const json: FirecrawlExtractionJson = {
+      contract_address: rawData.contract_address || '',
+      ticker: rawData.ticker || '',
+      supply: rawData.supply?.toString() || '0',
+      developer_address: rawData.developer_address || '',
+      token_distribution: (rawData.token_distribution || []).map((dist: any) => ({
+        entity: dist.entity || '',
+        percentage: Number(dist.percentage) || 0
+      })),
+      market_cap_on_launch: Number(rawData.market_cap_on_launch) || 0,
+      created_at: rawData.created_at || new Date().toISOString(),
+      title: rawData.title || '',
+      description: rawData.description || '',
+      social_links: rawData.social_links || []
+    };
+
+    const metadata: FirecrawlMetadata = {
+      title: rawData.title || '',
+      description: rawData.description || '',
+      sourceURL: rawData.sourceURL || '',
+      statusCode: 200
+    };
+
+    return { json, metadata };
+  }
+
   private async extractBatchWithRetry(urls: string[], retryCount = 0): Promise<FirecrawlExtraction[]> {
     try {
       console.log(`Processing batch of ${urls.length} URLs (attempt ${retryCount + 1}/${this.MAX_RETRIES})`);
@@ -68,7 +79,8 @@ export class FirecrawlClient {
           - token_distribution (array of {entity, percentage})
           - market_cap_on_launch (USD)
           - created_at (ISO date)
-          - social_links (URLs)`
+          - social_links (URLs)
+          - description (campaign description)`
       });
 
       console.log('\nExtract job response:', JSON.stringify(extractJob, null, 2));
@@ -91,7 +103,8 @@ export class FirecrawlClient {
         if (status.status === 'completed' && status.data) {
           console.log('\nBatch completed successfully');
           console.log('Extracted data:', JSON.stringify(status.data, null, 2));
-          return Array.isArray(status.data) ? status.data : [status.data];
+          const rawData = Array.isArray(status.data) ? status.data : [status.data];
+          return rawData.map((data: Record<string, any>) => this.transformExtraction(data));
         } else if (status.status === 'failed') {
           throw new Error(`Extraction failed: ${status.error || 'Unknown error'}`);
         } else if (status.status === 'cancelled') {
@@ -145,5 +158,23 @@ export class FirecrawlClient {
       console.error('Firecrawl extract error:', error);
       throw error;
     }
+  }
+
+  async extractFromUrl(url: string): Promise<FirecrawlExtraction> {
+    try {
+      console.log('Extracting data from URL:', url);
+      const results = await this.extractCampaigns([url]);
+      if (!results || results.length === 0) {
+        throw new Error('No data extracted from URL');
+      }
+      return results[0];
+    } catch (error) {
+      console.error('Failed to extract from URL:', error);
+      throw error;
+    }
+  }
+
+  async extractBatch(urls: string[]): Promise<FirecrawlExtraction[]> {
+    return this.extractCampaigns(urls);
   }
 } 

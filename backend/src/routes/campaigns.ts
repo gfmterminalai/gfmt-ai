@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { config } from '../core/config';
 import { FirecrawlClient } from '../clients/firecrawl';
 import { createClient } from '@supabase/supabase-js';
+import { FirecrawlExtraction } from '../types/firecrawl';
+import { DatabaseAdapter } from '../core/database';
 
 const router = Router();
 const firecrawl = new FirecrawlClient(config.FIRECRAWL_API_KEY);
@@ -93,7 +95,7 @@ router.post('/reconcile', async (req, res) => {
         
         // Process each extraction
         for (const extraction of extractions) {
-          if (!extraction.contract_address) {
+          if (!extraction.json.contract_address) {
             results.skipped++;
             continue;
           }
@@ -102,17 +104,16 @@ router.post('/reconcile', async (req, res) => {
           const { error: insertError } = await supabase
             .from('meme_coins')
             .insert({
-              contract_address: extraction.contract_address,
-              developer_address: extraction.developer_address,
-              ticker: extraction.ticker,
-              supply: extraction.supply,
-              market_cap_on_launch: extraction.market_cap_on_launch,
-              created_at: extraction.created_at,
-              avatar_url: extraction.avatar_url
+              contract_address: extraction.json.contract_address,
+              developer_address: extraction.json.developer_address,
+              ticker: extraction.json.ticker,
+              supply: extraction.json.supply,
+              market_cap_on_launch: extraction.json.market_cap_on_launch,
+              created_at: extraction.json.created_at
             });
             
           if (insertError) {
-            console.error(`Failed to insert campaign ${extraction.contract_address}:`, insertError);
+            console.error(`Failed to insert campaign ${extraction.json.contract_address}:`, insertError);
             results.errors++;
           } else {
             results.added++;
@@ -151,5 +152,88 @@ router.post('/reconcile', async (req, res) => {
     });
   }
 });
+
+export function createCampaignRoutes(db: DatabaseAdapter) {
+  const router = Router();
+  const firecrawl = new FirecrawlClient(config.FIRECRAWL_API_KEY);
+
+  // Get all campaigns
+  router.get('/', async (req, res) => {
+    try {
+      const campaigns = await db.getMemeCoinsPaginated();
+      res.json({ success: true, data: campaigns });
+    } catch (error) {
+      console.error('Failed to get campaigns:', error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Get a specific campaign
+  router.get('/:address', async (req, res) => {
+    try {
+      const campaign = await db.getMemeCoin(req.params.address);
+      if (!campaign) {
+        return res.status(404).json({
+          success: false,
+          error: 'Campaign not found'
+        });
+      }
+      res.json({ success: true, data: campaign });
+    } catch (error) {
+      console.error('Failed to get campaign:', error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Create a new campaign
+  router.post('/', async (req, res) => {
+    try {
+      const url = req.body.url;
+      if (!url) {
+        return res.status(400).json({
+          success: false,
+          error: 'URL is required'
+        });
+      }
+
+      const extraction = await firecrawl.extractFromUrl(url);
+      if (!extraction.json.contract_address) {
+        return res.status(400).json({
+          success: false,
+          error: 'Failed to extract contract address from campaign'
+        });
+      }
+
+      // Insert campaign
+      const memeCoin = await db.insertMemeCoin({
+        contract_address: extraction.json.contract_address,
+        developer_address: extraction.json.developer_address,
+        ticker: extraction.json.ticker,
+        supply: extraction.json.supply,
+        market_cap_on_launch: extraction.json.market_cap_on_launch,
+        created_at: new Date(extraction.json.created_at)
+      });
+
+      res.json({
+        success: true,
+        data: memeCoin
+      });
+    } catch (error) {
+      console.error('Failed to create campaign:', error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  return router;
+}
 
 export default router; 

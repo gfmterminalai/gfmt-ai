@@ -1,149 +1,137 @@
-import { config } from '../core/config';
-import { FirecrawlClient } from '../clients/firecrawl';
 import { createClient } from '@supabase/supabase-js';
+import { FirecrawlClient } from '../clients/firecrawl';
+import { FirecrawlExtraction } from '../types/firecrawl';
+import { config } from '../config';
 
 async function main() {
   try {
-    console.log('Starting GoFundMeme campaign backfill...');
+    console.log('Starting GoFundMeme backfill...');
     
     // Initialize clients
     const firecrawl = new FirecrawlClient(config.FIRECRAWL_API_KEY);
     const supabase = createClient(config.SUPABASE_URL!, config.SUPABASE_ANON_KEY!);
     
     // 1. Get all campaign URLs
-    console.log('\nFetching campaign URLs...');
     const campaignUrls = await firecrawl.mapWebsite();
     console.log(`Found ${campaignUrls.length} total campaign URLs`);
     
-    // 2. Get existing contract addresses from database
-    const { data: existingCampaigns, error: dbError } = await supabase
+    // Extract contract addresses from URLs
+    const websiteAddresses = campaignUrls
+      .map(url => {
+        const match = url.match(/campaigns\/([^\/]+)/);
+        return match ? match[1] : null;
+      })
+      .filter((address): address is string => address !== null);
+    
+    // Get existing campaigns from database
+    const { data: existingCampaigns } = await supabase
       .from('meme_coins')
       .select('contract_address');
+
+    const existingAddresses = new Set(existingCampaigns?.map(c => c.contract_address) || []);
     
-    if (dbError) {
-      throw new Error(`Database error: ${dbError.message}`);
-    }
+    // Find new campaigns
+    const newCampaigns = websiteAddresses
+      .filter(address => !existingAddresses.has(address))
+      .map(address => `https://www.gofundmeme.io/campaigns/${address}`);
+    
+    console.log(`Found ${newCampaigns.length} new campaigns to process`);
 
-    const existingAddresses = new Set(existingCampaigns?.map(c => c.contract_address));
-    console.log(`Found ${existingAddresses.size} existing campaigns in database`);
+    // Process campaigns in batches
+    const BATCH_SIZE = 3;
+    let processed = 0;
+    let added = 0;
+    let errors = 0;
 
-    // 3. Process campaigns one at a time
-    const results = {
-      processed: 0,
-      added: 0,
-      errors: 0,
-      skipped: 0,
-      distributions_added: 0
-    };
-
-    for (let i = 0; i < campaignUrls.length; i++) {
-      const url = campaignUrls[i];
-      console.log(`\nProcessing URL ${i + 1} of ${campaignUrls.length}: ${url}`);
+    for (let i = 0; i < newCampaigns.length; i += BATCH_SIZE) {
+      const batch = newCampaigns.slice(i, i + BATCH_SIZE);
+      console.log(`\nProcessing batch ${Math.floor(i/BATCH_SIZE) + 1} of ${Math.ceil(newCampaigns.length/BATCH_SIZE)}`);
       
       try {
-        // Extract campaign ID from URL first to check if it exists
-        const urlMatch = url.match(/campaigns\/([^\/]+)/);
-        if (!urlMatch) {
-          console.log('✗ Skipped - No campaign ID in URL');
-          results.skipped++;
-          continue;
-        }
-
-        const contractAddress = urlMatch[1];
+        const extractions = await firecrawl.extractCampaigns(batch);
         
-        if (existingAddresses.has(contractAddress)) {
-          console.log(`✓ Skipped - Already exists: ${contractAddress}`);
-          results.skipped++;
-          continue;
-        }
-
-        // Only extract if we don't have the token
-        const extraction = await firecrawl.extractFromUrl(url);
-        results.processed++;
-        
-        if (!extraction.contract_address) {
-          console.log('✗ Skipped - No contract address');
-          results.skipped++;
-          continue;
-        }
-
-        // First insert the meme coin
-        const { error: insertError } = await supabase
-          .from('meme_coins')
-          .insert({
-            contract_address: extraction.contract_address,
-            developer_address: extraction.developer_address,
-            ticker: extraction.ticker,
-            supply: extraction.supply,
-            market_cap_on_launch: extraction.market_cap_on_launch,
-            created_at: extraction.created_at,
-            avatar_url: extraction.avatar_url
-          });
-
-        if (insertError) {
-          console.error(`✗ Failed to insert ${extraction.contract_address}:`, insertError);
-          results.errors++;
-          continue;
-        }
-
-        // Then insert token distributions if any
-        if (extraction.token_distribution && extraction.token_distribution.length > 0) {
-          console.log(`Processing ${extraction.token_distribution.length} distributions for ${extraction.contract_address}`);
-          
-          // Insert each distribution as a separate row
-          for (const dist of extraction.token_distribution) {
-            console.log(`Inserting distribution: ${dist.entity} - ${dist.percentage}%`);
-            
-            const distribution = {
-              contract_address: extraction.contract_address,
-              entity: dist.entity,
-              percentage: dist.percentage
-            };
-            console.log('Distribution data:', distribution);
-
-            const { error: distError } = await supabase
-              .from('token_distributions')
-              .insert(distribution);
-
-            if (distError) {
-              console.error(`✗ Failed to insert distribution for ${extraction.contract_address} (${dist.entity}):`, {
-                error: distError,
-                code: distError.code,
-                message: distError.message,
-                details: distError.details,
-                hint: distError.hint
-              });
-            } else {
-              results.distributions_added++;
-              console.log(`✓ Added distribution: ${dist.entity} - ${dist.percentage}%`);
+        for (const extraction of extractions) {
+          try {
+            if (!extraction.json.contract_address) {
+              console.log('✗ Skipping campaign: Missing contract address');
+              continue;
             }
+
+            // Insert meme coin
+            const { error: insertError } = await supabase
+              .from('meme_coins')
+              .insert({
+                contract_address: extraction.json.contract_address,
+                developer_address: extraction.json.developer_address,
+                ticker: extraction.json.ticker,
+                supply: extraction.json.supply,
+                market_cap_on_launch: extraction.json.market_cap_on_launch,
+                created_at: new Date(extraction.json.created_at)
+              });
+
+            if (insertError) {
+              console.error(`✗ Failed to insert ${extraction.json.contract_address}:`, insertError);
+              errors++;
+              continue;
+            }
+
+            // Insert token distributions
+            if (extraction.json.token_distribution && extraction.json.token_distribution.length > 0) {
+              console.log(`Processing ${extraction.json.token_distribution.length} distributions for ${extraction.json.contract_address}`);
+              
+              // Insert each distribution
+              for (const dist of extraction.json.token_distribution) {
+                const { error: distError } = await supabase
+                  .from('token_distributions')
+                  .insert({
+                    contract_address: extraction.json.contract_address,
+                    entity: dist.entity,
+                    percentage: dist.percentage
+                  });
+
+                if (distError) {
+                  console.error(`✗ Failed to insert distribution for ${extraction.json.contract_address} (${dist.entity}):`, {
+                    error: distError,
+                    distribution: dist
+                  });
+                  errors++;
+                } else {
+                  console.log(`✓ Added distribution: ${dist.entity} = ${dist.percentage}%`);
+                }
+              }
+            }
+
+            added++;
+            console.log(`✓ Added: ${extraction.json.contract_address} (${extraction.json.title})`);
+            
+            // Add to existing addresses to prevent duplicates
+            existingAddresses.add(extraction.json.contract_address);
+            
+          } catch (error) {
+            console.error('✗ Failed to process extraction:', error);
+            errors++;
           }
+          
+          processed++;
         }
 
-        console.log(`✓ Added: ${extraction.contract_address} (${extraction.title})`);
-        results.added++;
-        existingAddresses.add(extraction.contract_address);
+        // Add delay between batches
+        if (i + BATCH_SIZE < newCampaigns.length) {
+          console.log('\nWaiting between batches...');
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        }
         
       } catch (error) {
-        console.error(`✗ Failed to process ${url}:`, error);
-        results.errors++;
-      }
-
-      // Add a delay between requests to avoid rate limiting
-      if (i < campaignUrls.length - 1) {
-        const delay = 3000; // 3 seconds
-        console.log(`Waiting ${delay}ms before next request...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        console.error('✗ Failed to process batch:', error);
+        errors++;
       }
     }
 
     // Print summary
     console.log('\n=== Backfill Summary ===');
-    console.log(`Total URLs processed: ${results.processed}`);
-    console.log(`New campaigns added: ${results.added}`);
-    console.log(`Token distributions added: ${results.distributions_added}`);
-    console.log(`Campaigns skipped: ${results.skipped}`);
-    console.log(`Errors encountered: ${results.errors}`);
+    console.log(`Total campaigns processed: ${processed}`);
+    console.log(`New campaigns added: ${added}`);
+    console.log(`Errors encountered: ${errors}`);
 
   } catch (error) {
     console.error('Script failed:', error instanceof Error ? error.message : error);
@@ -151,4 +139,5 @@ async function main() {
   }
 }
 
+// Run the script
 main(); 

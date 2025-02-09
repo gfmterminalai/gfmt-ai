@@ -1,5 +1,6 @@
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
-import { FirecrawlClient, FirecrawlExtraction } from '../../clients/firecrawl';
+import { FirecrawlClient } from '../../clients/firecrawl';
+import { FirecrawlExtraction } from '../../types/firecrawl';
 import { CampaignFilters, BatchResult, ReconciliationResult } from '../types/campaign';
 import { config } from '../../core/config';
 
@@ -72,17 +73,16 @@ export class CampaignService {
     const { error } = await this.supabase
       .from('meme_coins')
       .insert({
-        contract_address: campaign.contract_address,
-        developer_address: campaign.developer_address,
-        ticker: campaign.ticker,
-        supply: campaign.supply,
-        market_cap_on_launch: campaign.market_cap_on_launch,
-        created_at: campaign.created_at,
-        avatar_url: campaign.avatar_url
+        contract_address: campaign.json.contract_address,
+        developer_address: campaign.json.developer_address,
+        ticker: campaign.json.ticker,
+        supply: campaign.json.supply,
+        market_cap_on_launch: campaign.json.market_cap_on_launch,
+        created_at: campaign.json.created_at
       });
 
     if (error) throw error;
-    return this.getCampaign(campaign.contract_address);
+    return this.getCampaign(campaign.json.contract_address);
   }
 
   async saveCampaignsBatch(campaigns: FirecrawlExtraction[]): Promise<BatchResult> {
@@ -96,7 +96,7 @@ export class CampaignService {
 
     for (const campaign of campaigns) {
       try {
-        if (!campaign.contract_address) {
+        if (!campaign.json.contract_address) {
           results.skipped++;
           continue;
         }
@@ -106,7 +106,7 @@ export class CampaignService {
       } catch (error) {
         results.errors++;
         results.errorDetails?.push({
-          contractAddress: campaign.contract_address || 'unknown',
+          contractAddress: campaign.json.contract_address || 'unknown',
           error: error instanceof Error ? error.message : 'Unknown error'
         });
       }

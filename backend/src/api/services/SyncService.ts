@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { FirecrawlClient } from '../../clients/firecrawl';
+import { FirecrawlExtraction } from '../../types/firecrawl';
 import { config } from '../../core/config';
 import { EmailService } from '../../services/EmailService';
 
@@ -153,8 +154,7 @@ export class SyncService {
         // Insert new campaigns
         for (const extraction of newExtractions) {
           try {
-            if (!extraction.contract_address) {
-              this.logError(results, 'EXTRACTION_ERROR', `Missing contract address for campaign`);
+            if (!extraction.json.contract_address) {
               results.skipped++;
               continue;
             }
@@ -163,26 +163,25 @@ export class SyncService {
             const { error: insertError } = await this.supabase
               .from('meme_coins')
               .insert({
-                contract_address: extraction.contract_address,
-                developer_address: extraction.developer_address,
-                ticker: extraction.ticker,
-                supply: extraction.supply,
-                market_cap_on_launch: extraction.market_cap_on_launch,
-                created_at: extraction.created_at,
-                avatar_url: extraction.avatar_url
+                contract_address: extraction.json.contract_address,
+                developer_address: extraction.json.developer_address,
+                ticker: extraction.json.ticker,
+                supply: extraction.json.supply,
+                market_cap_on_launch: extraction.json.market_cap_on_launch,
+                created_at: extraction.json.created_at
               });
 
             if (insertError) {
-              this.logError(results, 'INSERT_ERROR', `Failed to insert campaign ${extraction.contract_address}: ${insertError.message}`);
+              this.logError(results, 'INSERT_ERROR', `Failed to insert campaign ${extraction.json.contract_address}: ${insertError.message}`);
               continue;
             }
 
-            console.log(`[${new Date().toISOString()}] Successfully inserted new campaign: ${extraction.contract_address}`);
+            console.log(`[${new Date().toISOString()}] Successfully inserted new campaign: ${extraction.json.contract_address}`);
             results.added++;
 
             // Insert token distributions
             const combinedDistributions = new Map<string, number>();
-            extraction.token_distribution?.forEach(dist => {
+            extraction.json.token_distribution?.forEach(dist => {
               if (dist.entity && dist.percentage) {
                 const currentTotal = combinedDistributions.get(dist.entity) || 0;
                 combinedDistributions.set(dist.entity, currentTotal + dist.percentage);
@@ -193,20 +192,20 @@ export class SyncService {
               const { error: distError } = await this.supabase
                 .from('token_distributions')
                 .insert({
-                  contract_address: extraction.contract_address,
+                  contract_address: extraction.json.contract_address,
                   entity,
                   percentage
                 });
 
               if (distError) {
-                this.logError(results, 'DISTRIBUTION_ERROR', `Failed to insert distribution for ${extraction.contract_address} (${entity}): ${distError.message}`);
+                this.logError(results, 'DISTRIBUTION_ERROR', `Failed to insert distribution for ${extraction.json.contract_address} (${entity}): ${distError.message}`);
               } else {
                 results.distributions_added++;
-                console.log(`[${new Date().toISOString()}] Added distribution for ${extraction.contract_address}: ${entity} = ${percentage}%`);
+                console.log(`[${new Date().toISOString()}] Added distribution for ${extraction.json.contract_address}: ${entity} = ${percentage}%`);
               }
             }
 
-            existingAddresses.add(extraction.contract_address);
+            existingAddresses.add(extraction.json.contract_address);
             results.processed++;
             
           } catch (error) {
@@ -243,15 +242,15 @@ export class SyncService {
 
         for (const extraction of distributionExtractions) {
           try {
-            if (!extraction.contract_address || !extraction.token_distribution?.length) {
-              this.logError(results, 'MISSING_DISTRIBUTION', `No token distribution data for ${extraction.contract_address}`);
+            if (!extraction.json.contract_address || !extraction.json.token_distribution?.length) {
+              this.logError(results, 'MISSING_DISTRIBUTION', `No token distribution data for ${extraction.json.contract_address}`);
               results.skipped++;
               continue;
             }
 
             // Combine token distributions
             const combinedDistributions = new Map<string, number>();
-            extraction.token_distribution.forEach(dist => {
+            extraction.json.token_distribution.forEach(dist => {
               if (dist.entity && dist.percentage) {
                 const currentTotal = combinedDistributions.get(dist.entity) || 0;
                 combinedDistributions.set(dist.entity, currentTotal + dist.percentage);
@@ -263,16 +262,16 @@ export class SyncService {
               const { error: distError } = await this.supabase
                 .from('token_distributions')
                 .insert({
-                  contract_address: extraction.contract_address,
+                  contract_address: extraction.json.contract_address,
                   entity,
                   percentage
                 });
 
               if (distError) {
-                this.logError(results, 'DISTRIBUTION_UPDATE_ERROR', `Failed to insert distribution for ${extraction.contract_address} (${entity}): ${distError.message}`);
+                this.logError(results, 'DISTRIBUTION_UPDATE_ERROR', `Failed to insert distribution for ${extraction.json.contract_address} (${entity}): ${distError.message}`);
               } else {
                 results.distributions_updated++;
-                console.log(`[${new Date().toISOString()}] Updated distribution for ${extraction.contract_address}: ${entity} = ${percentage}%`);
+                console.log(`[${new Date().toISOString()}] Updated distribution for ${extraction.json.contract_address}: ${entity} = ${percentage}%`);
               }
             }
 
