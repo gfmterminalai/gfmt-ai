@@ -1,4 +1,5 @@
 {
+  "version": 2,
   "crons": [{
     "path": "/api/sync",
     "schedule": "0 * * * *"
@@ -9,8 +10,16 @@
     "SUPABASE_ANON_KEY": "${SUPABASE_ANON_KEY}",
     "RESEND_API_KEY": "${RESEND_API_KEY}"
   },
-  "buildCommand": "npm run build",
-  "installCommand": "npm install",
-  "outputDirectory": "dist",
-  "framework": "node"
+  "builds": [
+    {
+      "src": "api/**/*.ts",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    }
+  ]
 } 
