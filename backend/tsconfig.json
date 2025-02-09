@@ -10,12 +10,24 @@
     "outDir": "dist",
     "rootDir": ".",
     "baseUrl": ".",
-    "typeRoots": ["./node_modules/@types", "./src/types"],
+    "typeRoots": [
+      "./node_modules/@types",
+      "./src/types"
+    ],
     "paths": {
-      "*": ["*", "src/types/*"]
+      "*": ["node_modules/*", "src/types/*"]
     },
     "types": ["node", "jest", "@jest/globals"]
   },
-  "include": ["src/**/*", "api/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "src/**/*",
+    "api/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/__tests__/**",
+    "jest.config.ts"
+  ]
 } 
