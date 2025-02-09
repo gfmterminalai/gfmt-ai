@@ -10,14 +10,6 @@
     "SUPABASE_ANON_KEY": "@supabase_anon_key",
     "RESEND_API_KEY": "@resend_api_key"
   },
-  "functions": {
-    "api/sync.ts": {
-      "memory": 1024,
-      "maxDuration": 60
-    }
-  },
-  "buildCommand": "npm install --force && npm run build",
-  "outputDirectory": "dist",
-  "framework": "node",
-  "nodeVersion": "18.x"
+  "buildCommand": "npm install && npm run build",
+  "outputDirectory": "dist"
 } 
