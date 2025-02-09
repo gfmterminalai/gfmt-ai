@@ -1,0 +1,12 @@
+{
+  "crons": [{
+    "path": "/api/sync",
+    "schedule": "0 * * * *"
+  }],
+  "env": {
+    "FIRECRAWL_API_KEY": "@firecrawl_api_key",
+    "SUPABASE_URL": "@supabase_url",
+    "SUPABASE_ANON_KEY": "@supabase_anon_key",
+    "RESEND_API_KEY": "@resend_api_key"
+  }
+} 
