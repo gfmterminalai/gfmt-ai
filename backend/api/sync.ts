@@ -9,10 +9,6 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY!
 );
 
-export const config = {
-  runtime: 'nodejs18'
-};
-
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
