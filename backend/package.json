@@ -16,9 +16,9 @@
     "init-db": "ts-node src/scripts/init-db.ts",
     "sync": "ts-node src/scripts/sync.ts",
     "cron": "ts-node src/scripts/cron.ts",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test": "jest --config jest.config.ts --testPathPattern=src/__tests__",
+    "test:watch": "jest --watch --config jest.config.ts --testPathPattern=src/__tests__",
+    "test:coverage": "jest --coverage --config jest.config.ts --testPathPattern=src/__tests__"
   },
   "dependencies": {
     "@mendable/firecrawl-js": "1.16.0",
@@ -35,6 +35,11 @@
     "zod": "3.24.1"
   },
   "devDependencies": {
+    "@babel/core": "^7.22.0",
+    "@babel/preset-env": "^7.22.0",
+    "@babel/preset-typescript": "^7.22.0",
+    "@babel/plugin-transform-modules-commonjs": "^7.22.0",
+    "babel-jest": "^29.7.0",
     "@jest/globals": "29.7.0",
     "@jest/types": "29.6.3",
     "@types/body-parser": "1.19.5",

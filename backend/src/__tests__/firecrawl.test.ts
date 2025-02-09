@@ -1,6 +1,8 @@
 import { FirecrawlClient } from '../clients/firecrawl';
 import FireCrawlApp from '@mendable/firecrawl-js';
 import { TEST_CAMPAIGN_URLS, TEST_CAMPAIGN_EXTRACTIONS } from './test-data';
+import { jest, describe, it, expect, beforeEach } from '@jest/globals';
+import type { FirecrawlExtraction } from '../types/firecrawl';
 
 // Mock the FireCrawlApp
 jest.mock('@mendable/firecrawl-js');
@@ -12,6 +14,20 @@ describe('FirecrawlClient', () => {
   beforeEach(() => {
     // Clear all mocks before each test
     jest.clearAllMocks();
+    
+    // Reset mock implementation
+    (FireCrawlApp as jest.MockedClass<typeof FireCrawlApp>).mockImplementation(() => ({
+      apiKey: mockApiKey,
+      apiUrl: 'https://api.firecrawl.com',
+      mapUrl: jest.fn(),
+      asyncExtract: jest.fn(),
+      getExtractStatus: jest.fn(),
+      // Add other required methods with empty implementations
+      scrapeUrl: jest.fn(),
+      search: jest.fn(),
+      handleError: jest.fn()
+    }));
+
     client = new FirecrawlClient(mockApiKey);
   });
 
@@ -23,8 +39,9 @@ describe('FirecrawlClient', () => {
         'https://www.gofundmeme.io/campaigns/edit/abc123' // should be filtered out
       ];
 
-      // Mock the mapUrl method
-      (FireCrawlApp.prototype.mapUrl as jest.Mock).mockResolvedValue({
+      const mockApp = (client as any).app;
+      mockApp.mapUrl.mockResolvedValue({
+        success: true,
         links: mockUrls
       });
 
@@ -38,46 +55,33 @@ describe('FirecrawlClient', () => {
 
   describe('extractCampaigns', () => {
     it('should extract single campaign URL successfully', async () => {
-      // Mock the asyncExtract and getExtractStatus methods
-      (FireCrawlApp.prototype.asyncExtract as jest.Mock).mockResolvedValue({
+      const mockApp = (client as any).app;
+      mockApp.asyncExtract.mockResolvedValue({
+        success: true,
         jobId: 'test-job-id'
       });
 
       // Mock the raw data format that would come from Firecrawl
       const mockRawData = {
-        title: '$Yeezy',
-        supply: '1000000000',
-        ticker: '$Yeezy',
-        contract_address: '9QqtYGAJUmgctBUgZCjxcx8yjSNBjkXdxpByuumSVsHC',
-        developer_address: 'VPtSdieQaAxe2bVVtsdojbEZsGW4T1beNCnPyS6DKKf',
-        token_distribution: [
-          { entity: 'liquidity pool', percentage: 50 },
-          { entity: 'presalers', percentage: 50 }
-        ],
-        market_cap_on_launch: 6193,
-        created_at: '2025-02-03T03:57:00Z',
-        description: 'Yeezy token launch',
-        social_links: [
-          'https://x.com/AiggyAgent',
-          'https://aiggy.fun/',
-          'https://twitter.com/search?q=$COINY'
-        ],
-        sourceURL: 'https://www.gofundmeme.io/campaigns/9QqtYGAJUmgctBUgZCjxcx8yjSNBjkXdxpByuumSVsHC'
+        ...TEST_CAMPAIGN_EXTRACTIONS[0].json,
+        sourceURL: TEST_CAMPAIGN_EXTRACTIONS[0].metadata.sourceURL
       };
 
-      (FireCrawlApp.prototype.getExtractStatus as jest.Mock).mockResolvedValue({
+      mockApp.getExtractStatus.mockResolvedValue({
+        success: true,
         status: 'completed',
         data: mockRawData
       });
 
       const result = await client.extractCampaigns([TEST_CAMPAIGN_URLS[0]]);
-
       expect(result).toEqual([TEST_CAMPAIGN_EXTRACTIONS[0]]);
       expect(result.length).toBe(1);
     });
 
     it('should extract three campaign URLs successfully', async () => {
-      (FireCrawlApp.prototype.asyncExtract as jest.Mock).mockResolvedValue({
+      const mockApp = (client as any).app;
+      mockApp.asyncExtract.mockResolvedValue({
+        success: true,
         jobId: 'test-job-id'
       });
 
@@ -87,13 +91,13 @@ describe('FirecrawlClient', () => {
         sourceURL: extraction.metadata.sourceURL
       }));
 
-      (FireCrawlApp.prototype.getExtractStatus as jest.Mock).mockResolvedValue({
+      mockApp.getExtractStatus.mockResolvedValue({
+        success: true,
         status: 'completed',
         data: mockRawData
       });
 
       const result = await client.extractCampaigns(TEST_CAMPAIGN_URLS);
-
       expect(result).toEqual(TEST_CAMPAIGN_EXTRACTIONS);
       expect(result.length).toBe(3);
     });

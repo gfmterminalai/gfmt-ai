@@ -1,5 +1,6 @@
-// Load environment variables
 import dotenv from 'dotenv';
+import { jest } from '@jest/globals';
+
 dotenv.config();
 
 // Mock environment variables if not provided
