@@ -10,8 +10,9 @@
     "outDir": "dist",
     "rootDir": ".",
     "baseUrl": ".",
+    "typeRoots": ["./node_modules/@types", "./src/types"],
     "paths": {
-      "*": ["*"]
+      "*": ["*", "src/types/*"]
     }
   },
   "include": ["src/**/*", "api/**/*"],

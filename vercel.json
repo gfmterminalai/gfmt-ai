@@ -10,7 +10,7 @@
     "SUPABASE_ANON_KEY": "@supabase_anon_key",
     "RESEND_API_KEY": "@resend_api_key"
   },
-  "buildCommand": "npm install --legacy-peer-deps && npm run build",
+  "buildCommand": "rm -rf node_modules && npm install --legacy-peer-deps && npm run build",
   "outputDirectory": "dist",
   "nodeVersion": "18.x"
 } 
