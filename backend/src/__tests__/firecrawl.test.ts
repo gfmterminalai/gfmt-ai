@@ -43,9 +43,31 @@ describe('FirecrawlClient', () => {
         jobId: 'test-job-id'
       });
 
+      // Mock the raw data format that would come from Firecrawl
+      const mockRawData = {
+        title: '$Yeezy',
+        supply: '1000000000',
+        ticker: '$Yeezy',
+        contract_address: '9QqtYGAJUmgctBUgZCjxcx8yjSNBjkXdxpByuumSVsHC',
+        developer_address: 'VPtSdieQaAxe2bVVtsdojbEZsGW4T1beNCnPyS6DKKf',
+        token_distribution: [
+          { entity: 'liquidity pool', percentage: 50 },
+          { entity: 'presalers', percentage: 50 }
+        ],
+        market_cap_on_launch: 6193,
+        created_at: '2025-02-03T03:57:00Z',
+        description: 'Yeezy token launch',
+        social_links: [
+          'https://x.com/AiggyAgent',
+          'https://aiggy.fun/',
+          'https://twitter.com/search?q=$COINY'
+        ],
+        sourceURL: 'https://www.gofundmeme.io/campaigns/9QqtYGAJUmgctBUgZCjxcx8yjSNBjkXdxpByuumSVsHC'
+      };
+
       (FireCrawlApp.prototype.getExtractStatus as jest.Mock).mockResolvedValue({
         status: 'completed',
-        data: TEST_CAMPAIGN_EXTRACTIONS[0] // Use $Yeezy campaign data
+        data: mockRawData
       });
 
       const result = await client.extractCampaigns([TEST_CAMPAIGN_URLS[0]]);
@@ -59,10 +81,15 @@ describe('FirecrawlClient', () => {
         jobId: 'test-job-id'
       });
 
-      // Return all three campaigns at once
+      // Mock the raw data format for all three campaigns
+      const mockRawData = TEST_CAMPAIGN_EXTRACTIONS.map(extraction => ({
+        ...extraction.json,
+        sourceURL: extraction.metadata.sourceURL
+      }));
+
       (FireCrawlApp.prototype.getExtractStatus as jest.Mock).mockResolvedValue({
         status: 'completed',
-        data: TEST_CAMPAIGN_EXTRACTIONS
+        data: mockRawData
       });
 
       const result = await client.extractCampaigns(TEST_CAMPAIGN_URLS);
