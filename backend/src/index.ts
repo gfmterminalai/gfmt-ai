@@ -2,8 +2,13 @@ import express from 'express';
 import cors from 'cors';
 import { config } from './core/config';
 import campaignsRouter from './routes/campaigns';
+import { createSyncRoutes } from './api/routes/sync';
+import { DatabaseAdapter } from './core/database';
 
 const app = express();
+
+// Initialize database adapter
+const db = new DatabaseAdapter(config.SUPABASE_URL!, config.SUPABASE_ANON_KEY!);
 
 // Middleware
 app.use(cors());
@@ -11,6 +16,7 @@ app.use(express.json());
 
 // Routes
 app.use('/api/campaigns', campaignsRouter);
+app.use('/api/sync', createSyncRoutes(db));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
