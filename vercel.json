@@ -13,11 +13,11 @@
   "functions": {
     "api/sync.ts": {
       "memory": 1024,
-      "maxDuration": 60,
-      "public": true
+      "maxDuration": 60
     }
   },
-  "installCommand": "npm install",
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist"
+  "buildCommand": "npm install --force && npm run build",
+  "outputDirectory": "dist",
+  "framework": "node",
+  "nodeVersion": "18.x"
 } 
