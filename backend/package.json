@@ -9,7 +9,6 @@
   },
   "scripts": {
     "build": "tsc",
-    "postinstall": "npm rebuild && tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "backfill": "ts-node src/scripts/backfill.ts",
