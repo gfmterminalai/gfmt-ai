@@ -11,7 +11,9 @@ const configSchema = z.object({
   SUPABASE_ANON_KEY: z.string(),
   SUPABASE_PROJECT_ID: z.string().optional(),
   SUPABASE_ACCESS_TOKEN: z.string().optional(),
-  RESEND_API_KEY: z.string()
+  RESEND_API_KEY: z.string(),
+  VERCEL_AUTH_TOKEN: z.string().optional(),
+  VERCEL_URL: z.string().optional()
 });
 
 export const config = configSchema.parse({
@@ -21,7 +23,9 @@ export const config = configSchema.parse({
   SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
   SUPABASE_PROJECT_ID: process.env.SUPABASE_PROJECT_ID,
   SUPABASE_ACCESS_TOKEN: process.env.SUPABASE_ACCESS_TOKEN,
-  RESEND_API_KEY: process.env.RESEND_API_KEY
+  RESEND_API_KEY: process.env.RESEND_API_KEY,
+  VERCEL_AUTH_TOKEN: process.env.VERCEL_AUTH_TOKEN,
+  VERCEL_URL: process.env.VERCEL_URL
 });
 
 export type Config = typeof config; 

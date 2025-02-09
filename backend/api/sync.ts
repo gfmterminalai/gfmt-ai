@@ -13,13 +13,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  // Get token from Authorization header or query parameter
+  const authHeader = req.headers.authorization;
+  const headerToken = authHeader?.split(' ')[1]; // Extract token from "Bearer <token>"
+  const queryToken = req.query.token as string;
+  const token = headerToken || queryToken;
+  
+  if (!token || token !== process.env.VERCEL_AUTH_TOKEN) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  
   try {
     const syncService = new SyncService();
     const results = await syncService.sync();
     
     res.status(200).json({
       success: true,
-      results
+      results,
+      source: 'manual'
     });
   } catch (error) {
     console.error('Sync endpoint error:', error);
