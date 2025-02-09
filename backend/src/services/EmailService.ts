@@ -1,5 +1,5 @@
 import { Resend } from 'resend';
-import { SyncResults } from '../api/services/SyncService';
+import { SyncResults } from './SyncService';
 import { config } from '../core/config';
 
 export class EmailService {
@@ -45,7 +45,7 @@ export class EmailService {
     return `
 Error Details
 ------------
-${results.error_details.map(error => 
+${results.error_details.map((error: { type: string; message: string; timestamp: string }) => 
   `• [${error.timestamp}] ${error.type}: ${error.message}`
 ).join('\n')}
 `;

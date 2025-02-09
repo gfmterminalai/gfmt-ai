@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { CampaignService } from '../services/CampaignService';
+import { CampaignService } from '../../services/CampaignService';
 import { CampaignFilters } from '../types/campaign';
 
 export class CampaignController {

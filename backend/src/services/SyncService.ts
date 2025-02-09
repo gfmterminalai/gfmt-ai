@@ -1,8 +1,8 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { FirecrawlClient } from '../../clients/firecrawl';
-import { FirecrawlExtraction } from '../../types/firecrawl';
-import { config } from '../../core/config';
-import { EmailService } from '../../services/EmailService';
+import { FirecrawlClient } from '../clients/firecrawl';
+import { FirecrawlExtraction } from '../types/firecrawl';
+import { config } from '../core/config';
+import { EmailService } from './EmailService';
 
 export interface SyncResults {
   processed: number;

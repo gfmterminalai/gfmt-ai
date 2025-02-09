@@ -1,27 +1,20 @@
 import { Router } from 'express';
-import { DatabaseAdapter } from '../../core/database';
-import { SyncService } from '../services/SyncService';
+import { SyncService } from '../../services/SyncService';
 
-export function createSyncRoutes(db: DatabaseAdapter) {
-  const router = Router();
+const router = Router();
+const syncService = new SyncService();
 
-  router.post('/', async (req, res) => {
-    try {
-      const syncService = new SyncService();
-      const results = await syncService.sync();
-      
-      res.json({
-        success: true,
-        results
-      });
-    } catch (error) {
-      console.error('Sync endpoint error:', error);
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
-      });
-    }
-  });
+router.post('/', async (req, res) => {
+  try {
+    const results = await syncService.sync();
+    res.json({ success: true, results });
+  } catch (error) {
+    console.error('Sync failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
 
-  return router;
-} 
+export default router; 

@@ -1,8 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import { config } from './core/config';
-import campaignsRouter from './routes/campaigns';
-import { createSyncRoutes } from './api/routes/sync';
+import campaignRoutes from './api/routes/campaignRoutes';
+import syncRoutes from './api/routes/sync';
 import { DatabaseAdapter } from './core/database';
 
 const app = express();
@@ -15,8 +15,8 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
-app.use('/api/campaigns', campaignsRouter);
-app.use('/api/sync', createSyncRoutes(db));
+app.use('/api/campaigns', campaignRoutes);
+app.use('/api/sync', syncRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

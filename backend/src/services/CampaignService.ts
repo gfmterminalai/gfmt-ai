@@ -1,8 +1,8 @@
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
-import { FirecrawlClient } from '../../clients/firecrawl';
-import { FirecrawlExtraction } from '../../types/firecrawl';
+import { FirecrawlClient } from '../clients/firecrawl';
+import { FirecrawlExtraction } from '../types/firecrawl';
 import { CampaignFilters, BatchResult, ReconciliationResult } from '../types/campaign';
-import { config } from '../../core/config';
+import { config } from '../core/config';
 
 export class CampaignService {
   private firecrawl: FirecrawlClient;

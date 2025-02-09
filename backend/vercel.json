@@ -10,13 +10,9 @@
     "SUPABASE_ANON_KEY": "${SUPABASE_ANON_KEY}",
     "RESEND_API_KEY": "${RESEND_API_KEY}"
   },
-  "functions": {
-    "api/**/*.ts": {
-      "memory": 1024,
-      "maxDuration": 60
-    }
-  },
-  "installCommand": "npm install",
+  "rewrites": [
+    { "source": "/api/sync", "destination": "/src/api/routes/sync" }
+  ],
   "buildCommand": "npm run build",
   "outputDirectory": "dist"
 } 
