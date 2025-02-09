@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { config } from './core/config';
 import campaignRoutes from './api/routes/campaignRoutes';
-import syncRoutes from './api/routes/sync';
+import { createSyncRoutes } from './api/routes/sync';
 import { DatabaseAdapter } from './core/database';
 
 const app = express();
@@ -16,7 +16,7 @@ app.use(express.json());
 
 // Routes
 app.use('/api/campaigns', campaignRoutes);
-app.use('/api/sync', syncRoutes);
+app.use('/api/sync', createSyncRoutes(db));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
