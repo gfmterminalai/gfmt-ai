@@ -10,7 +10,7 @@
     "SUPABASE_ANON_KEY": "@supabase_anon_key",
     "RESEND_API_KEY": "@resend_api_key"
   },
-  "buildCommand": "pnpm install && pnpm run build",
+  "buildCommand": "npm install && npm run build",
   "outputDirectory": "dist",
   "nodeVersion": "18.x"
 } 
