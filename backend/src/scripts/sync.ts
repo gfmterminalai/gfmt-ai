@@ -31,7 +31,7 @@ async function main() {
 
     console.log('\nWebsite Campaigns:', websiteAddresses);
     
-    // 2. Get existing contract addresses from database
+    // 2. Get existing campaigns from database
     const { data: existingCampaigns, error: dbError } = await supabase
       .from('meme_coins')
       .select('contract_address');
@@ -51,84 +51,160 @@ async function main() {
     
     console.log('\nNew campaigns to process:', newCampaigns.length ? newCampaigns : 'None');
     
-    if (newCampaigns.length === 0) {
-      console.log('No new campaigns to process');
-      return;
-    }
-
-    // Extract data for all new campaigns in one batch
-    console.log(`\nExtracting data for ${newCampaigns.length} campaigns...`);
-    const extractions = await firecrawl.extractCampaigns(newCampaigns);
-    
-    // Process the results
+    // Track results
     const results = {
-      processed: newCampaigns.length,
+      processed: 0,
       added: 0,
       errors: 0,
       skipped: 0,
-      distributions_added: 0
+      distributions_added: 0,
+      distributions_updated: 0
     };
 
-    // Insert each extraction into the database
-    for (const extraction of extractions) {
-      try {
-        if (!extraction.contract_address) {
-          results.skipped++;
-          continue;
-        }
+    // Process new campaigns first
+    if (newCampaigns.length > 0) {
+      console.log(`\nExtracting data for ${newCampaigns.length} new campaigns...`);
+      const newExtractions = await firecrawl.extractCampaigns(newCampaigns);
+      
+      // Insert new campaigns
+      for (const extraction of newExtractions) {
+        try {
+          if (!extraction.contract_address) {
+            results.skipped++;
+            continue;
+          }
 
-        // First insert the meme coin
-        const { error: insertError } = await supabase
-          .from('meme_coins')
-          .insert({
-            contract_address: extraction.contract_address,
-            developer_address: extraction.developer_address,
-            ticker: extraction.ticker,
-            supply: extraction.supply,
-            market_cap_on_launch: extraction.market_cap_on_launch,
-            created_at: extraction.created_at,
-            avatar_url: extraction.avatar_url
+          // Insert new meme coin
+          const { error: insertError } = await supabase
+            .from('meme_coins')
+            .insert({
+              contract_address: extraction.contract_address,
+              developer_address: extraction.developer_address,
+              ticker: extraction.ticker,
+              supply: extraction.supply,
+              market_cap_on_launch: extraction.market_cap_on_launch,
+              created_at: extraction.created_at,
+              avatar_url: extraction.avatar_url
+            });
+
+          if (insertError) {
+            console.error(`Failed to insert campaign ${extraction.contract_address}:`, insertError);
+            results.errors++;
+            continue;
+          }
+
+          results.added++;
+
+          // Insert token distributions
+          const combinedDistributions = new Map<string, number>();
+          extraction.token_distribution?.forEach(dist => {
+            if (dist.entity && dist.percentage) {
+              const currentTotal = combinedDistributions.get(dist.entity) || 0;
+              combinedDistributions.set(dist.entity, currentTotal + dist.percentage);
+            }
           });
 
-        if (insertError) {
-          console.error(`Failed to insert ${extraction.contract_address}:`, insertError);
-          results.errors++;
-          continue;
-        }
-
-        // Then insert token distributions if any
-        if (extraction.token_distribution && extraction.token_distribution.length > 0) {
-          for (const dist of extraction.token_distribution) {
+          for (const [entity, percentage] of combinedDistributions.entries()) {
             const { error: distError } = await supabase
               .from('token_distributions')
               .insert({
                 contract_address: extraction.contract_address,
-                entity: dist.entity,
-                percentage: dist.percentage
+                entity,
+                percentage
               });
 
             if (distError) {
-              console.error(`Failed to insert distribution for ${extraction.contract_address} (${dist.entity}):`, distError);
+              console.error(`Failed to insert distribution for ${extraction.contract_address} (${entity}):`, distError);
             } else {
               results.distributions_added++;
             }
           }
-        }
 
-        results.added++;
-        existingAddresses.add(extraction.contract_address);
-        
-      } catch (error) {
-        console.error(`Failed to process extraction:`, error);
-        results.errors++;
+          existingAddresses.add(extraction.contract_address);
+          results.processed++;
+          
+        } catch (error) {
+          console.error(`Failed to process extraction:`, error);
+          results.errors++;
+        }
+      }
+    }
+
+    // 3. Check for campaigns missing token distributions
+    console.log('\nChecking for campaigns missing token distributions...');
+    const { data: campaignsWithDistributions, error: distError } = await supabase
+      .from('meme_coins')
+      .select(`
+        contract_address,
+        token_distributions (
+          entity,
+          percentage
+        )
+      `);
+    
+    if (distError) {
+      throw new Error(`Failed to check token distributions: ${distError.message}`);
+    }
+
+    const campaignsNeedingDistributions = campaignsWithDistributions
+      ?.filter(campaign => !campaign.token_distributions?.length)
+      .map(campaign => `https://www.gofundmeme.io/campaigns/${campaign.contract_address}`) || [];
+
+    console.log('\nCampaigns missing token distributions:', campaignsNeedingDistributions);
+
+    // Process campaigns missing token distributions
+    if (campaignsNeedingDistributions.length > 0) {
+      console.log(`\nRe-extracting data for ${campaignsNeedingDistributions.length} campaigns missing token distributions...`);
+      const distributionExtractions = await firecrawl.extractCampaigns(campaignsNeedingDistributions);
+
+      for (const extraction of distributionExtractions) {
+        try {
+          if (!extraction.contract_address || !extraction.token_distribution?.length) {
+            results.skipped++;
+            continue;
+          }
+
+          // Combine token distributions
+          const combinedDistributions = new Map<string, number>();
+          extraction.token_distribution.forEach(dist => {
+            if (dist.entity && dist.percentage) {
+              const currentTotal = combinedDistributions.get(dist.entity) || 0;
+              combinedDistributions.set(dist.entity, currentTotal + dist.percentage);
+            }
+          });
+
+          // Insert token distributions
+          for (const [entity, percentage] of combinedDistributions.entries()) {
+            const { error: distError } = await supabase
+              .from('token_distributions')
+              .insert({
+                contract_address: extraction.contract_address,
+                entity,
+                percentage
+              });
+
+            if (distError) {
+              console.error(`Failed to insert distribution for ${extraction.contract_address} (${entity}):`, distError);
+            } else {
+              results.distributions_updated++;
+            }
+          }
+
+          results.processed++;
+          
+        } catch (error) {
+          console.error(`Failed to process token distribution:`, error);
+          results.errors++;
+        }
       }
     }
 
     // Print summary
     console.log('\n=== Sync Summary ===');
-    console.log(`Total URLs processed: ${results.processed}`);
+    console.log(`Total campaigns processed: ${results.processed}`);
     console.log(`New campaigns added: ${results.added}`);
-    console.log(`Token distributions added: ${results.distributions_added}`);
+    console.log(`New token distributions added: ${results.distributions_added}`);
+    console.log(`Token distributions updated: ${results.distributions_updated}`);
     console.log(`Campaigns skipped: ${results.skipped}`);
     console.log(`Errors encountered: ${results.errors}`);
 

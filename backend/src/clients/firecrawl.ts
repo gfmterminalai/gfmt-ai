@@ -19,6 +19,10 @@ export interface FirecrawlExtraction {
 
 export class FirecrawlClient {
   private app: any;
+  private readonly MAX_RETRIES = 3;
+  private readonly BATCH_SIZE = 3;
+  private readonly TIMEOUT_SECONDS = 120;
+  private readonly POLL_INTERVAL_MS = 2000;
 
   constructor(apiKey: string) {
     this.app = new FireCrawlApp({ apiKey });
@@ -48,76 +52,89 @@ export class FirecrawlClient {
     }
   }
 
+  private async extractBatchWithRetry(urls: string[], retryCount = 0): Promise<FirecrawlExtraction[]> {
+    try {
+      console.log(`Processing batch of ${urls.length} URLs (attempt ${retryCount + 1}/${this.MAX_RETRIES})`);
+      console.log('URLs in this batch:', urls);
+
+      const extractJob = await this.app.asyncExtract(urls, {
+        prompt: `Extract campaign details from the page:
+          - title (campaign/token name)
+          - supply (total token supply)
+          - ticker (token symbol)
+          - avatar_url (token logo)
+          - contract_address (Solana address)
+          - developer_address (Solana address)
+          - token_distribution (array of {entity, percentage})
+          - market_cap_on_launch (USD)
+          - created_at (ISO date)
+          - social_links (URLs)`
+      });
+
+      console.log('\nExtract job response:', JSON.stringify(extractJob, null, 2));
+
+      const jobId = extractJob?.jobId || extractJob?.id || (typeof extractJob === 'string' ? extractJob : null);
+      if (!jobId) {
+        throw new Error('No job ID returned from asyncExtract');
+      }
+
+      console.log(`\nJob ${jobId} started, polling for results...`);
+
+      // Poll for results
+      let attempts = 0;
+      const maxAttempts = Math.floor(this.TIMEOUT_SECONDS * 1000 / this.POLL_INTERVAL_MS);
+      
+      while (attempts < maxAttempts) {
+        const status = await this.app.getExtractStatus(jobId);
+        console.log('\nStatus response:', JSON.stringify(status, null, 2));
+        
+        if (status.status === 'completed' && status.data) {
+          console.log('\nBatch completed successfully');
+          console.log('Extracted data:', JSON.stringify(status.data, null, 2));
+          return Array.isArray(status.data) ? status.data : [status.data];
+        } else if (status.status === 'failed') {
+          throw new Error(`Extraction failed: ${status.error || 'Unknown error'}`);
+        } else if (status.status === 'cancelled') {
+          throw new Error('Extraction was cancelled');
+        }
+        
+        attempts++;
+        await new Promise(resolve => setTimeout(resolve, this.POLL_INTERVAL_MS));
+      }
+
+      throw new Error(`Extraction timed out after ${this.TIMEOUT_SECONDS} seconds`);
+    } catch (error) {
+      if (retryCount < this.MAX_RETRIES - 1) {
+        console.log(`Batch failed, retrying... (${retryCount + 1}/${this.MAX_RETRIES})`);
+        await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds before retry
+        return this.extractBatchWithRetry(urls, retryCount + 1);
+      }
+      throw error;
+    }
+  }
+
   async extractCampaigns(urls: string[]): Promise<FirecrawlExtraction[]> {
     try {
-      const BATCH_SIZE = 5; // Changed from 10 to 5
       const results: FirecrawlExtraction[] = [];
       
-      // Process URLs in batches of 5
-      for (let i = 0; i < urls.length; i += BATCH_SIZE) {
-        const batch = urls.slice(i, i + BATCH_SIZE);
-        console.log(`\nProcessing batch ${(i/BATCH_SIZE) + 1} of ${Math.ceil(urls.length/BATCH_SIZE)} (${batch.length} URLs)`);
-        console.log('URLs in this batch:', batch);
+      // Process URLs in small batches
+      for (let i = 0; i < urls.length; i += this.BATCH_SIZE) {
+        const batch = urls.slice(i, i + this.BATCH_SIZE);
+        console.log(`\nProcessing batch ${Math.floor(i/this.BATCH_SIZE) + 1} of ${Math.ceil(urls.length/this.BATCH_SIZE)}`);
         
-        const extractJob = await this.app.asyncExtract(batch, {
-          prompt: `Extract campaign details from the page:
-            - title (campaign/token name)
-            - supply (total token supply)
-            - ticker (token symbol)
-            - avatar_url (token logo)
-            - contract_address (Solana address)
-            - developer_address (Solana address)
-            - token_distribution (array of {entity, percentage})
-            - market_cap_on_launch (USD)
-            - created_at (ISO date)
-            - social_links (URLs)`
-        });
-
-        console.log('\nExtract job response:', JSON.stringify(extractJob, null, 2));
-
-        const jobId = extractJob?.jobId || extractJob?.id || (typeof extractJob === 'string' ? extractJob : null);
-        if (!jobId) {
-          console.error('Invalid extract job response:', extractJob);
-          throw new Error('No job ID returned from asyncExtract');
+        try {
+          const batchResults = await this.extractBatchWithRetry(batch);
+          results.push(...batchResults);
+        } catch (error) {
+          console.error(`Failed to process batch starting at index ${i}:`, error);
+          // Continue with next batch instead of failing completely
+          continue;
         }
 
-        console.log(`\nJob ${jobId} started, polling for results...`);
-
-        // Poll for results
-        let attempts = 0;
-        const MAX_ATTEMPTS = 30; // 1 minute timeout
-        
-        while (attempts < MAX_ATTEMPTS) {
-          const status = await this.app.getExtractStatus(jobId);
-          console.log('\nStatus response:', JSON.stringify(status, null, 2));
-          
-          if (status.status === 'completed' && status.data) {
-            console.log('\nBatch completed successfully');
-            console.log('Extracted data:', JSON.stringify(status.data, null, 2));
-            // Handle both array and single object responses
-            if (Array.isArray(status.data)) {
-              results.push(...status.data);
-            } else {
-              results.push(status.data);
-            }
-            break;
-          } else if (status.status === 'failed') {
-            throw new Error(`Extraction failed: ${status.error || 'Unknown error'}`);
-          } else if (status.status === 'cancelled') {
-            throw new Error('Extraction was cancelled');
-          }
-          
-          attempts++;
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-
-        if (attempts >= MAX_ATTEMPTS) {
-          throw new Error('Extraction timed out after 60 seconds');
-        }
-
-        // Add a small delay between batches
-        if (i + BATCH_SIZE < urls.length) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
+        // Add a delay between batches
+        if (i + this.BATCH_SIZE < urls.length) {
+          console.log('Waiting between batches...');
+          await new Promise(resolve => setTimeout(resolve, 3000));
         }
       }
 
