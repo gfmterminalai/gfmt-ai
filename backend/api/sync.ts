@@ -25,8 +25,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   
   try {
+    console.log('Starting sync process...');
+    console.log('Environment:', {
+      FIRECRAWL_API_KEY: !!process.env.FIRECRAWL_API_KEY,
+      SUPABASE_URL: !!process.env.SUPABASE_URL,
+      SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
+      VERCEL_URL: process.env.VERCEL_URL
+    });
+
+    // Validate required environment variables
+    if (!process.env.FIRECRAWL_API_KEY) throw new Error('FIRECRAWL_API_KEY is not set');
+    if (!process.env.SUPABASE_URL) throw new Error('SUPABASE_URL is not set');
+    if (!process.env.SUPABASE_ANON_KEY) throw new Error('SUPABASE_ANON_KEY is not set');
+    
     const syncService = new SyncService();
+    console.log('Created SyncService instance');
+    
     const results = await syncService.sync();
+    console.log('Sync completed:', results);
     
     res.status(200).json({
       success: true,
@@ -37,7 +53,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('Sync endpoint error:', error);
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred'
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      stack: error instanceof Error ? error.stack : undefined
     });
   }
 } 
