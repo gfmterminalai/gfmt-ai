@@ -19,7 +19,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const queryToken = req.query.token as string;
   const token = headerToken || queryToken;
   
-  if (!token || token !== process.env.VERCEL_AUTH_TOKEN) {
+  if (!token || token !== config.VERCEL_AUTH_TOKEN) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
@@ -27,16 +27,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     console.log('Starting sync process...');
     console.log('Environment:', {
-      FIRECRAWL_API_KEY: !!process.env.FIRECRAWL_API_KEY,
-      SUPABASE_URL: !!process.env.SUPABASE_URL,
-      SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
-      VERCEL_URL: process.env.VERCEL_URL
+      FIRECRAWL_API_KEY: !!config.FIRECRAWL_API_KEY,
+      SUPABASE_URL: !!config.SUPABASE_URL,
+      SUPABASE_ANON_KEY: !!config.SUPABASE_ANON_KEY,
+      VERCEL_URL: config.VERCEL_URL
     });
 
     // Validate required environment variables
-    if (!process.env.FIRECRAWL_API_KEY) throw new Error('FIRECRAWL_API_KEY is not set');
-    if (!process.env.SUPABASE_URL) throw new Error('SUPABASE_URL is not set');
-    if (!process.env.SUPABASE_ANON_KEY) throw new Error('SUPABASE_ANON_KEY is not set');
+    if (!config.FIRECRAWL_API_KEY) throw new Error('FIRECRAWL_API_KEY is not set');
+    if (!config.SUPABASE_URL) throw new Error('SUPABASE_URL is not set');
+    if (!config.SUPABASE_ANON_KEY) throw new Error('SUPABASE_ANON_KEY is not set');
     
     const syncService = new SyncService();
     console.log('Created SyncService instance');
