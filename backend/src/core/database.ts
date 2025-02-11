@@ -10,19 +10,19 @@ import * as path from 'path';
 // ... existing interfaces ...
 
 export class DatabaseAdapter {
-  private client: SupabaseClient;
+  public supabase: SupabaseClient;
 
-  constructor(supabaseUrl: string, supabaseKey: string) {
-    this.client = createClient(supabaseUrl, supabaseKey);
+  constructor(url: string, key: string) {
+    this.supabase = createClient(url, key);
   }
 
   async transaction<T>(callback: (transaction: SupabaseClient) => Promise<T>): Promise<T> {
     // Note: Supabase doesn't support true transactions yet, this is for future compatibility
-    return callback(this.client);
+    return callback(this.supabase);
   }
 
   async createCampaign(campaign: Campaign): Promise<Campaign> {
-    const { data, error } = await this.client
+    const { data, error } = await this.supabase
       .from('campaigns')
       .upsert(campaign)
       .select()
@@ -33,7 +33,7 @@ export class DatabaseAdapter {
   }
 
   async getCampaign(contractAddress: string): Promise<Campaign | null> {
-    const { data, error } = await this.client
+    const { data, error } = await this.supabase
       .from('campaigns')
       .select('*')
       .eq('contract_address', contractAddress)
@@ -44,7 +44,7 @@ export class DatabaseAdapter {
   }
 
   async createMemeCoin(memeCoin: MemeCoin): Promise<MemeCoin> {
-    const { data, error } = await this.client
+    const { data, error } = await this.supabase
       .from('meme_coins')
       .upsert(memeCoin)
       .select()
@@ -55,7 +55,7 @@ export class DatabaseAdapter {
   }
 
   async getMemeCoin(contractAddress: string): Promise<MemeCoin | null> {
-    const { data, error } = await this.client
+    const { data, error } = await this.supabase
       .from('meme_coins')
       .select('*')
       .eq('contract_address', contractAddress)
@@ -66,7 +66,7 @@ export class DatabaseAdapter {
   }
 
   async createDeveloper(developer: Developer): Promise<Developer> {
-    const { data, error } = await this.client
+    const { data, error } = await this.supabase
       .from('developers')
       .upsert(developer)
       .select()
@@ -77,7 +77,7 @@ export class DatabaseAdapter {
   }
 
   async getDeveloper(address: string): Promise<Developer | null> {
-    const { data, error } = await this.client
+    const { data, error } = await this.supabase
       .from('developers')
       .select('*')
       .eq('address', address)
@@ -87,7 +87,7 @@ export class DatabaseAdapter {
     return data;
   }
 
-  async processFirecrawlData(extraction: FirecrawlExtraction, client: SupabaseClient = this.client): Promise<void> {
+  async processFirecrawlData(extraction: FirecrawlExtraction, client: SupabaseClient = this.supabase): Promise<void> {
     const { json } = extraction;
 
     // Create or update meme coin record
@@ -153,7 +153,7 @@ export class DatabaseAdapter {
       const migrationPath = path.join(__dirname, '../migrations/001_init.sql');
       const sql = fs.readFileSync(migrationPath, 'utf8');
       
-      const { error } = await this.client.rpc('init_schema', { sql_script: sql });
+      const { error } = await this.supabase.rpc('init_schema', { sql_script: sql });
       if (error) throw error;
     } catch (error) {
       console.error('Error initializing schema:', error);
@@ -162,7 +162,7 @@ export class DatabaseAdapter {
   }
 
   async addPriceHistory(priceHistory: Omit<PriceHistory, 'id'>): Promise<PriceHistory> {
-    const { data, error } = await this.client
+    const { data, error } = await this.supabase
       .from('price_history')
       .insert(priceHistory)
       .select()
@@ -173,7 +173,7 @@ export class DatabaseAdapter {
   }
 
   async addMarketCapHistory(marketCapHistory: Omit<MarketCapHistory, 'id'>): Promise<MarketCapHistory> {
-    const { data, error } = await this.client
+    const { data, error } = await this.supabase
       .from('market_cap_history')
       .insert(marketCapHistory)
       .select()
@@ -184,7 +184,7 @@ export class DatabaseAdapter {
   }
 
   async getLatestPrice(contractAddress: string): Promise<LatestPrice | null> {
-    const { data, error } = await this.client
+    const { data, error } = await this.supabase
       .from('latest_prices')
       .select('*')
       .eq('contract_address', contractAddress)
@@ -195,7 +195,7 @@ export class DatabaseAdapter {
   }
 
   async getLatestMarketCap(contractAddress: string): Promise<LatestMarketCap | null> {
-    const { data, error } = await this.client
+    const { data, error } = await this.supabase
       .from('latest_market_caps')
       .select('*')
       .eq('contract_address', contractAddress)
@@ -210,7 +210,7 @@ export class DatabaseAdapter {
     startTime?: Date,
     endTime?: Date
   ): Promise<PriceHistory[]> {
-    let query = this.client
+    let query = this.supabase
       .from('price_history')
       .select('*')
       .eq('contract_address', contractAddress)
@@ -233,7 +233,7 @@ export class DatabaseAdapter {
     startTime?: Date,
     endTime?: Date
   ): Promise<MarketCapHistory[]> {
-    let query = this.client
+    let query = this.supabase
       .from('market_cap_history')
       .select('*')
       .eq('contract_address', contractAddress)
@@ -252,7 +252,7 @@ export class DatabaseAdapter {
   }
 
   async getMemeCoinsPaginated(limit: number = 10, offset: number = 0): Promise<MemeCoin[]> {
-    const { data, error } = await this.client
+    const { data, error } = await this.supabase
       .from('meme_coins')
       .select('*')
       .range(offset, offset + limit - 1)
@@ -263,7 +263,7 @@ export class DatabaseAdapter {
   }
 
   async getMemeCoinsByDev(developerAddress: string): Promise<MemeCoin[]> {
-    const { data, error } = await this.client
+    const { data, error } = await this.supabase
       .from('meme_coins')
       .select('*')
       .eq('developer_address', developerAddress)
@@ -274,7 +274,7 @@ export class DatabaseAdapter {
   }
 
   async insertMemeCoin(memeCoin: Partial<MemeCoin>): Promise<MemeCoin> {
-    const { data, error } = await this.client
+    const { data, error } = await this.supabase
       .from('meme_coins')
       .insert(memeCoin)
       .select()
@@ -285,7 +285,7 @@ export class DatabaseAdapter {
   }
 
   async updateMemeCoin(contractAddress: string, updates: Partial<MemeCoin>): Promise<MemeCoin> {
-    const { data, error } = await this.client
+    const { data, error } = await this.supabase
       .from('meme_coins')
       .update(updates)
       .eq('contract_address', contractAddress)
@@ -297,7 +297,7 @@ export class DatabaseAdapter {
   }
 
   async getDevelopersPaginated(limit: number = 10, offset: number = 0): Promise<Developer[]> {
-    const { data, error } = await this.client
+    const { data, error } = await this.supabase
       .from('developers')
       .select('*')
       .range(offset, offset + limit - 1)
@@ -308,7 +308,7 @@ export class DatabaseAdapter {
   }
 
   async getTopDevelopers(limit: number = 10): Promise<Developer[]> {
-    const { data, error } = await this.client
+    const { data, error } = await this.supabase
       .from('developers')
       .select('*')
       .order('reputation', { ascending: false })
@@ -319,7 +319,7 @@ export class DatabaseAdapter {
   }
 
   async getDevelopersByReputation(limit: number = 10): Promise<Developer[]> {
-    const { data, error } = await this.client
+    const { data, error } = await this.supabase
       .from('developers')
       .select('*')
       .order('reputation', { ascending: false })
@@ -330,7 +330,7 @@ export class DatabaseAdapter {
   }
 
   async searchDevelopers(query: string): Promise<Developer[]> {
-    const { data, error } = await this.client
+    const { data, error } = await this.supabase
       .from('developers')
       .select('*')
       .or(`address.ilike.%${query}%,name.ilike.%${query}%`)
@@ -341,7 +341,7 @@ export class DatabaseAdapter {
   }
 
   async getDevStats(): Promise<any> {
-    const { data, error } = await this.client
+    const { data, error } = await this.supabase
       .from('developer_stats')
       .select('*')
       .single();

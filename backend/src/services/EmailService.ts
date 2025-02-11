@@ -8,7 +8,10 @@ export class EmailService {
   private readonly FROM_EMAIL = 'no-reply@alerts.gfmterminal.ai';
 
   constructor() {
-    this.resend = new Resend(config.RESEND_API_KEY);
+    if (!process.env.RESEND_API_KEY) {
+      throw new Error('RESEND_API_KEY is not set');
+    }
+    this.resend = new Resend(process.env.RESEND_API_KEY);
   }
 
   private getSubjectLine(status: 'success' | 'failure' | 'partial_success'): string {

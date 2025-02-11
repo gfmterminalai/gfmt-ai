@@ -1,7 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { FirecrawlClient } from '../clients/firecrawl';
 import { FirecrawlExtraction } from '../types/firecrawl';
-import { config } from '../core/config';
 import { EmailService } from './EmailService';
 
 export interface SyncResults {
@@ -19,6 +18,7 @@ export interface SyncResults {
     message: string;
     timestamp: string;
   }>;
+  total: number;
 }
 
 export class SyncService {
@@ -28,8 +28,8 @@ export class SyncService {
   private hoursSinceLastSync: number | undefined;
 
   constructor() {
-    this.firecrawl = new FirecrawlClient(config.FIRECRAWL_API_KEY);
-    this.supabase = createClient(config.SUPABASE_URL!, config.SUPABASE_ANON_KEY!);
+    this.firecrawl = new FirecrawlClient(process.env.FIRECRAWL_API_KEY!);
+    this.supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
     this.emailService = new EmailService();
   }
 
@@ -93,7 +93,7 @@ export class SyncService {
     }
   }
 
-  async sync(): Promise<SyncResults> {
+  async syncBatch(batchSize: number, offset: number = 0): Promise<SyncResults> {
     const startTime = new Date();
     const results: SyncResults = {
       processed: 0,
@@ -105,17 +105,18 @@ export class SyncService {
       start_time: startTime.toISOString(),
       end_time: '',
       duration_ms: 0,
-      error_details: []
+      error_details: [],
+      total: 0
     };
 
     try {
       await this.checkLastSync();
 
-      console.log(`[${startTime.toISOString()}] Starting sync process...`);
+      console.log(`Starting batch sync process (size: ${batchSize}, offset: ${offset})...`);
 
       // 1. Get all campaign URLs
       const campaignUrls = await this.firecrawl.mapWebsite();
-      console.log(`[${new Date().toISOString()}] Found ${campaignUrls.length} total campaign URLs on website`);
+      results.total = campaignUrls.length;
       
       // Extract contract addresses from URLs
       const websiteAddresses = campaignUrls
@@ -137,19 +138,16 @@ export class SyncService {
       }
 
       const existingAddresses = new Set(existingCampaigns?.map(c => c.contract_address));
-      console.log(`[${new Date().toISOString()}] Found ${existingAddresses.size} existing campaigns in database`);
       
-      // Find new campaigns
+      // Get batch of new campaigns
       const newCampaigns = websiteAddresses
         .filter(address => !existingAddresses.has(address))
+        .slice(offset, offset + batchSize)
         .map(address => `https://www.gofundmeme.io/campaigns/${address}`);
 
-      console.log(`[${new Date().toISOString()}] Found ${newCampaigns.length} new campaigns to process`);
-
-      // Process new campaigns first
+      // Process batch
       if (newCampaigns.length > 0) {
         const newExtractions = await this.firecrawl.extractCampaigns(newCampaigns);
-        console.log(`[${new Date().toISOString()}] Successfully extracted data for ${newExtractions.length} new campaigns`);
         
         // Insert new campaigns
         for (const extraction of newExtractions) {
@@ -176,7 +174,6 @@ export class SyncService {
               continue;
             }
 
-            console.log(`[${new Date().toISOString()}] Successfully inserted new campaign: ${extraction.json.contract_address}`);
             results.added++;
 
             // Insert token distributions
@@ -201,84 +198,13 @@ export class SyncService {
                 this.logError(results, 'DISTRIBUTION_ERROR', `Failed to insert distribution for ${extraction.json.contract_address} (${entity}): ${distError.message}`);
               } else {
                 results.distributions_added++;
-                console.log(`[${new Date().toISOString()}] Added distribution for ${extraction.json.contract_address}: ${entity} = ${percentage}%`);
               }
             }
 
-            existingAddresses.add(extraction.json.contract_address);
             results.processed++;
             
           } catch (error) {
             this.logError(results, 'PROCESSING_ERROR', `Failed to process extraction: ${error instanceof Error ? error.message : String(error)}`);
-          }
-        }
-      }
-
-      // 3. Check for campaigns missing token distributions
-      const { data: campaignsWithDistributions, error: distError } = await this.supabase
-        .from('meme_coins')
-        .select(`
-          contract_address,
-          token_distributions (
-            entity,
-            percentage
-          )
-        `);
-      
-      if (distError) {
-        this.logError(results, 'DISTRIBUTION_CHECK_ERROR', `Failed to check token distributions: ${distError.message}`);
-        throw distError;
-      }
-
-      const campaignsNeedingDistributions = campaignsWithDistributions
-        ?.filter(campaign => !campaign.token_distributions?.length)
-        .map(campaign => `https://www.gofundmeme.io/campaigns/${campaign.contract_address}`) || [];
-
-      console.log(`[${new Date().toISOString()}] Found ${campaignsNeedingDistributions.length} campaigns missing token distributions`);
-
-      // Process campaigns missing token distributions
-      if (campaignsNeedingDistributions.length > 0) {
-        const distributionExtractions = await this.firecrawl.extractCampaigns(campaignsNeedingDistributions);
-
-        for (const extraction of distributionExtractions) {
-          try {
-            if (!extraction.json.contract_address || !extraction.json.token_distribution?.length) {
-              this.logError(results, 'MISSING_DISTRIBUTION', `No token distribution data for ${extraction.json.contract_address}`);
-              results.skipped++;
-              continue;
-            }
-
-            // Combine token distributions
-            const combinedDistributions = new Map<string, number>();
-            extraction.json.token_distribution.forEach(dist => {
-              if (dist.entity && dist.percentage) {
-                const currentTotal = combinedDistributions.get(dist.entity) || 0;
-                combinedDistributions.set(dist.entity, currentTotal + dist.percentage);
-              }
-            });
-
-            // Insert token distributions
-            for (const [entity, percentage] of combinedDistributions.entries()) {
-              const { error: distError } = await this.supabase
-                .from('token_distributions')
-                .insert({
-                  contract_address: extraction.json.contract_address,
-                  entity,
-                  percentage
-                });
-
-              if (distError) {
-                this.logError(results, 'DISTRIBUTION_UPDATE_ERROR', `Failed to insert distribution for ${extraction.json.contract_address} (${entity}): ${distError.message}`);
-              } else {
-                results.distributions_updated++;
-                console.log(`[${new Date().toISOString()}] Updated distribution for ${extraction.json.contract_address}: ${entity} = ${percentage}%`);
-              }
-            }
-
-            results.processed++;
-            
-          } catch (error) {
-            this.logError(results, 'DISTRIBUTION_PROCESSING_ERROR', `Failed to process token distribution: ${error instanceof Error ? error.message : String(error)}`);
           }
         }
       }
@@ -293,18 +219,10 @@ export class SyncService {
       
       await this.recordSyncHistory(results, status);
       
-      // Send email report
-      await this.emailService.sendSyncReport(results, status, this.hoursSinceLastSync);
-
-      // Log final summary
-      console.log(`\n[${endTime.toISOString()}] Sync Summary:`);
-      console.log(`Duration: ${results.duration_ms}ms`);
-      console.log(`Campaigns processed: ${results.processed}`);
-      console.log(`New campaigns added: ${results.added}`);
-      console.log(`New distributions added: ${results.distributions_added}`);
-      console.log(`Distributions updated: ${results.distributions_updated}`);
-      console.log(`Errors encountered: ${results.errors}`);
-      console.log(`Campaigns skipped: ${results.skipped}`);
+      // Only send email if this is the final batch
+      if (offset + batchSize >= results.total) {
+        await this.emailService.sendSyncReport(results, status, this.hoursSinceLastSync);
+      }
 
       return results;
 
@@ -315,11 +233,18 @@ export class SyncService {
       
       await this.recordSyncHistory(results, 'failure');
       
-      // Send failure email
-      await this.emailService.sendSyncReport(results, 'failure', this.hoursSinceLastSync);
+      // Only send failure email if this is the first batch
+      if (offset === 0) {
+        await this.emailService.sendSyncReport(results, 'failure', this.hoursSinceLastSync);
+      }
       
       this.logError(results, 'FATAL_ERROR', `Sync failed: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
+  }
+
+  // Original sync method now uses syncBatch
+  async sync(): Promise<SyncResults> {
+    return this.syncBatch(5, 0);
   }
 } 
