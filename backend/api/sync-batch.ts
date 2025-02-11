@@ -22,11 +22,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  try {
-    // Initialize services
-    const db = new DatabaseAdapter(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
-    const syncService = new SyncService();
+  // Initialize services outside try block so they're available in catch
+  const db = new DatabaseAdapter(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
+  const syncService = new SyncService();
 
+  try {
     // Get current sync history
     const { data: syncHistory, error: historyError } = await db.supabase
       .from('sync_history')

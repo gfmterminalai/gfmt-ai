@@ -12,12 +12,11 @@
     "VERCEL_AUTH_TOKEN": "@vercel_auth_token"
   },
   "functions": {
-    "backend/api/*.ts": {
+    "/backend/api/*.ts": {
       "maxDuration": 60
     }
   },
   "buildCommand": "cd backend && npm install --legacy-peer-deps && npm run build",
   "outputDirectory": "backend/dist",
-  "rootDirectory": "backend",
   "nodeVersion": "18.x"
 } 
