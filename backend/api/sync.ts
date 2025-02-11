@@ -2,9 +2,6 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { DatabaseAdapter } from '../src/core/database';
 import { SyncService } from '../src/services/SyncService';
 
-// Initialize database adapter
-const db = new DatabaseAdapter(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
-
 const BATCH_SIZE = 5; // Process 5 campaigns at a time
 const MAX_EXECUTION_TIME = 45000; // 45 seconds
 
@@ -44,7 +41,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!process.env.SUPABASE_ANON_KEY) throw new Error('SUPABASE_ANON_KEY is not set');
     if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not set');
     
-    console.log('[3] Creating SyncService instance...');
+    // Initialize services
+    const db = new DatabaseAdapter(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
     const syncService = new SyncService();
     
     // Check for recent syncs

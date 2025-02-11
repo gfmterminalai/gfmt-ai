@@ -4,9 +4,6 @@ import { SyncService } from '../src/services/SyncService';
 
 const BATCH_SIZE = 5;
 
-// Initialize database adapter
-const db = new DatabaseAdapter(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
@@ -26,6 +23,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Initialize services
+    const db = new DatabaseAdapter(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
+    const syncService = new SyncService();
+
     // Get current sync history
     const { data: syncHistory, error: historyError } = await db.supabase
       .from('sync_history')
@@ -46,7 +47,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const syncService = new SyncService();
     const results = await syncService.syncBatch(BATCH_SIZE, syncHistory.campaigns_processed);
 
     // Update sync history
@@ -84,6 +84,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (error) {
     console.error('Batch processing error:', error);
+    console.error('Error details:', {
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
 
     // Update sync history with error
     if (syncId) {
