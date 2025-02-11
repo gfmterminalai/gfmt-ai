@@ -165,18 +165,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   } catch (error) {
     console.error('[11] Sync endpoint error:', error);
-    console.error('Error details:', {
+    const errorDetails = {
       name: error instanceof Error ? error.name : 'Unknown',
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
       constructor: error?.constructor?.name
-    });
+    };
+    console.error('Error details:', errorDetails);
     
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      error: error instanceof Error ? error.message : String(error),
       errorType: error instanceof Error ? error.name : 'Unknown',
-      errorDetails: error instanceof Error ? error.stack : undefined
+      errorDetails
     });
   }
 } 
