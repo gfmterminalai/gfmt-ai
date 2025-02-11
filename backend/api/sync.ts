@@ -34,7 +34,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
       VERCEL_URL: process.env.VERCEL_URL,
       NODE_ENV: process.env.NODE_ENV,
-      RESEND_API_KEY: !!process.env.RESEND_API_KEY
+      RESEND_API_KEY: !!process.env.RESEND_API_KEY,
+      VERCEL_AUTH_TOKEN: !!process.env.VERCEL_AUTH_TOKEN
     });
 
     // Validate required environment variables
@@ -47,6 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const syncService = new SyncService();
     
     // Check for recent syncs
+    console.log('[4] Checking for recent syncs...');
     const { data: recentSync, error: historyError } = await db.supabase
       .from('sync_history')
       .select('*')
@@ -55,8 +57,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .limit(1)
       .single();
       
-    if (historyError && historyError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
-      throw historyError;
+    if (historyError) {
+      console.error('[4a] Error checking recent syncs:', historyError);
+      if (historyError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+        throw historyError;
+      }
     }
 
     // If there's an active sync less than 5 minutes old, don't start a new one
@@ -70,6 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Create a new sync history record
+    console.log('[5] Creating new sync history record...');
     const { data: newSync, error: createError } = await db.supabase
       .from('sync_history')
       .insert({
@@ -86,17 +92,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .select()
       .single();
 
-    if (createError) throw createError;
+    if (createError) {
+      console.error('[5a] Error creating sync history:', createError);
+      throw createError;
+    }
 
     // Start processing the first batch
-    console.log('[4] Starting first batch...');
+    console.log('[6] Starting first batch...');
     
     try {
       const results = await syncService.syncBatch(BATCH_SIZE);
-      console.log('[5] First batch completed:', results);
+      console.log('[7] First batch completed:', results);
 
       // Update sync history
-      await db.supabase
+      console.log('[8] Updating sync history...');
+      const { error: updateError } = await db.supabase
         .from('sync_history')
         .update({
           campaigns_processed: results.processed,
@@ -112,8 +122,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })
         .eq('id', newSync.id);
 
+      if (updateError) {
+        console.error('[8a] Error updating sync history:', updateError);
+        throw updateError;
+      }
+
       // If there's more to process, schedule the next batch
       if (results.processed < results.total) {
+        console.log('[9] Scheduling next batch...');
         // Schedule next batch via webhook
         const nextBatchUrl = `${process.env.VERCEL_URL}/api/sync-batch?token=${token}&syncId=${newSync.id}`;
         await fetch(nextBatchUrl, { method: 'POST' });
@@ -126,7 +142,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         syncId: newSync.id
       });
     } catch (error) {
-      console.error('[6] Sync batch error:', error);
+      console.error('[10] Sync batch error:', error);
+      console.error('Error details:', {
+        name: error instanceof Error ? error.name : 'Unknown',
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       
       // Update sync history with error
       await db.supabase
@@ -145,8 +166,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       throw error;
     }
   } catch (error) {
-    console.error('[7] Sync endpoint error:', error);
-    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace available');
+    console.error('[11] Sync endpoint error:', error);
+    console.error('Error details:', {
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      constructor: error?.constructor?.name
+    });
     
     res.status(500).json({
       success: false,
