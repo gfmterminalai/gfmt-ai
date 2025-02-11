@@ -11,7 +11,12 @@
     "RESEND_API_KEY": "@resend_api_key",
     "VERCEL_AUTH_TOKEN": "@vercel_auth_token"
   },
-  "buildCommand": "rm -rf node_modules && npm install --legacy-peer-deps && npm run build",
-  "outputDirectory": "dist",
+  "functions": {
+    "backend/api/*.ts": {
+      "maxDuration": 60
+    }
+  },
+  "buildCommand": "cd backend && npm install --legacy-peer-deps && npm run build",
+  "outputDirectory": "backend/dist",
   "nodeVersion": "18.x"
 } 
