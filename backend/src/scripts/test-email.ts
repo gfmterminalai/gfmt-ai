@@ -1,6 +1,7 @@
 import { EmailService } from '../services/EmailService';
 
 async function main() {
+  console.log('Starting email test...');
   const emailService = new EmailService();
 
   const testResults = {
@@ -14,14 +15,26 @@ async function main() {
     end_time: new Date().toISOString(),
     duration_ms: 5000,
     total: 15,
-    error_details: []
+    error_details: [{
+      type: 'TEST_ERROR',
+      message: 'This is a test error message',
+      timestamp: new Date().toISOString()
+    }]
   };
 
   try {
+    console.log('Attempting to send test email...');
     await emailService.sendSyncReport(testResults, 'partial_success', 1.0);
     console.log('Test email sent successfully');
   } catch (error) {
     console.error('Failed to send test email:', error);
+    if (error instanceof Error) {
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+    }
   }
 }
 

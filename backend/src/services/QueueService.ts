@@ -1,5 +1,7 @@
 import { Redis } from '@upstash/redis'
 import { SyncService } from './SyncService'
+import { EmailService } from './EmailService'
+import { SyncResults } from './SyncService'
 
 export interface QueueJob {
   id: string
@@ -10,21 +12,31 @@ export interface QueueJob {
   updatedAt: string
   error?: string
   attempts?: number
-  [key: string]: unknown
+  results?: SyncResults
 }
 
 export class QueueService {
   private redis: Redis
   private syncService: SyncService
+  private emailService: EmailService
   private readonly MAX_ATTEMPTS = 3
   private readonly PROCESSING_TIMEOUT = 5 * 60 * 1000 // 5 minutes
+  private readonly JOB_EXPIRY = 24 * 60 * 60 // 24 hours in seconds
+  private readonly JOB_PREFIX = 'gfm:job:'
+  private readonly QUEUE_KEY = 'gfm:queue'
 
   constructor() {
+    console.log('Initializing QueueService with Redis URL:', process.env.UPSTASH_REDIS_REST_URL);
     this.redis = new Redis({
       url: process.env.UPSTASH_REDIS_REST_URL!,
       token: process.env.UPSTASH_REDIS_REST_TOKEN!,
     })
     this.syncService = new SyncService()
+    this.emailService = new EmailService()
+  }
+
+  private getJobKey(jobId: string): string {
+    return `${this.JOB_PREFIX}${jobId}`
   }
 
   private async createJob(type: QueueJob['type'], params: Record<string, any>): Promise<QueueJob> {
@@ -38,46 +50,92 @@ export class QueueService {
       attempts: 0
     }
 
-    await this.redis.hset(`job:${job.id}`, { ...job, params: JSON.stringify(job.params) })
-    await this.redis.lpush('job_queue', job.id)
-    return job
+    const jobKey = this.getJobKey(job.id)
+    console.log('Creating job:', { jobKey, job });
+    
+    try {
+      // Store job data
+      const jobData = JSON.stringify(job)
+      const setResult = await this.redis.set(jobKey, jobData)
+      console.log('Job data stored in Redis:', setResult);
+      
+      // Set expiry
+      const expireResult = await this.redis.expire(jobKey, this.JOB_EXPIRY)
+      console.log('Job expiry set:', expireResult);
+      
+      // Add to queue
+      const queueResult = await this.redis.lpush(this.QUEUE_KEY, job.id)
+      console.log('Job added to queue:', queueResult);
+      
+      // Return job without verification
+      return job;
+    } catch (error) {
+      console.error('Error creating job:', error);
+      throw error;
+    }
   }
 
   async getJob(jobId: string): Promise<QueueJob | null> {
-    const job = await this.redis.hgetall(`job:${jobId}`)
-    if (!job) return null
+    console.log('Getting job:', jobId);
+    const jobKey = this.getJobKey(jobId);
     
     try {
-      return {
-        ...job,
-        params: job.params ? JSON.parse(job.params as string) : {},
-        attempts: parseInt(job.attempts as string) || 0
-      } as QueueJob
+      const data = await this.redis.get(jobKey)
+      console.log('Redis get result:', data);
+      
+      if (!data) {
+        console.log('No job found for key:', jobKey);
+        return null;
+      }
+      
+      const job = JSON.parse(data as string) as QueueJob;
+      console.log('Parsed job:', job);
+      return job;
     } catch (error) {
-      console.error('Error parsing job params:', error)
-      return job as QueueJob
+      console.error('Error getting job:', { error, jobId, jobKey })
+      return null
     }
   }
 
   private async updateJob(jobId: string, updates: Partial<QueueJob>): Promise<void> {
-    const job = await this.getJob(jobId)
-    if (!job) return
+    console.log('Updating job:', { jobId, updates });
+    const jobKey = this.getJobKey(jobId);
+    
+    try {
+      // Get current job data
+      const currentJob = await this.getJob(jobId)
+      if (!currentJob) {
+        console.log('No job found to update');
+        return;
+      }
 
-    const updatedJob = {
-      ...job,
-      ...updates,
-      updatedAt: new Date().toISOString(),
-      params: JSON.stringify(updates.params || job.params)
+      // Update job data
+      const updatedJob = {
+        ...currentJob,
+        ...updates,
+        updatedAt: new Date().toISOString()
+      }
+
+      // Store updated job
+      const setResult = await this.redis.set(jobKey, JSON.stringify(updatedJob))
+      console.log('Job updated in Redis:', setResult);
+      
+      // Reset expiry
+      const expireResult = await this.redis.expire(jobKey, this.JOB_EXPIRY)
+      console.log('Job expiry updated:', expireResult);
+    } catch (error) {
+      console.error('Error updating job:', { error, jobId, jobKey });
+      throw error;
     }
-
-    await this.redis.hset(`job:${jobId}`, updatedJob as Record<string, unknown>)
   }
 
   private async handleStuckJobs(): Promise<void> {
     try {
-      const jobs = await this.redis.keys('job:*')
-      for (const jobKey of jobs) {
-        const jobId = jobKey.replace('job:', '')
+      const keys = await this.redis.keys(`${this.JOB_PREFIX}*`)
+      console.log('Found job keys:', keys);
+      
+      for (const key of keys) {
+        const jobId = key.replace(this.JOB_PREFIX, '')
         const job = await this.getJob(jobId)
         
         if (job?.status === 'processing') {
@@ -93,12 +151,16 @@ export class QueueService {
                 attempts: (job.attempts || 0) + 1,
                 error: `Job timed out after ${this.PROCESSING_TIMEOUT / 1000} seconds`
               })
-              await this.redis.lpush('job_queue', jobId)
+              await this.redis.lpush(this.QUEUE_KEY, jobId)
             } else {
               await this.updateJob(jobId, {
                 status: 'failed',
                 error: `Job failed after ${job.attempts} attempts`
               })
+
+              if (job.type === 'sync' && job.results) {
+                await this.emailService.sendSyncReport(job.results, 'failure')
+              }
             }
           }
         }
@@ -109,47 +171,75 @@ export class QueueService {
   }
 
   async processNextJob(): Promise<void> {
-    // First, handle any stuck jobs
     await this.handleStuckJobs()
 
-    const jobId = await this.redis.rpop('job_queue')
-    if (!jobId) return
-
-    const job = await this.getJob(jobId)
-    if (!job) return
-
+    let currentJobId: string | null = null;
+    
     try {
+      currentJobId = await this.redis.rpop(this.QUEUE_KEY)
+      if (!currentJobId) {
+        console.log('No jobs in queue');
+        return;
+      }
+
+      console.log('Processing job:', currentJobId);
+      const job = await this.getJob(currentJobId)
+      if (!job) {
+        console.log('Job not found:', currentJobId);
+        return;
+      }
+
       await this.updateJob(job.id, { 
         status: 'processing',
         attempts: (job.attempts || 0) + 1
       })
 
+      let results: SyncResults | undefined
+
       switch (job.type) {
         case 'sync':
-          await this.syncService.sync()
+          results = await this.syncService.sync()
           break
         case 'sync-batch':
           const { batchSize = 5, offset = 0 } = job.params
-          await this.syncService.syncBatch(batchSize, offset)
+          results = await this.syncService.syncBatch(batchSize, offset)
           break
       }
 
-      await this.updateJob(job.id, { status: 'completed' })
+      await this.updateJob(job.id, { 
+        status: 'completed',
+        results
+      })
+
+      if (job.type === 'sync' && results) {
+        const status = results.errors === 0 ? 'success' : 
+          results.processed > 0 ? 'partial_success' : 'failure'
+        await this.emailService.sendSyncReport(results, status)
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
-      console.error(`Job ${job.id} failed:`, errorMessage)
+      console.error('Job processing error:', error)
 
-      if ((job.attempts || 0) < this.MAX_ATTEMPTS) {
-        await this.updateJob(job.id, { 
-          status: 'pending',
-          error: errorMessage
-        })
-        await this.redis.lpush('job_queue', job.id)
-      } else {
-        await this.updateJob(job.id, { 
-          status: 'failed',
-          error: `Failed after ${job.attempts} attempts. Last error: ${errorMessage}`
-        })
+      if (currentJobId) {
+        const job = await this.getJob(currentJobId)
+        if (job) {
+          if ((job.attempts || 0) < this.MAX_ATTEMPTS) {
+            await this.updateJob(currentJobId, { 
+              status: 'pending',
+              error: errorMessage
+            })
+            await this.redis.lpush(this.QUEUE_KEY, currentJobId)
+          } else {
+            await this.updateJob(currentJobId, { 
+              status: 'failed',
+              error: `Failed after ${job.attempts} attempts. Last error: ${errorMessage}`
+            })
+
+            if (job.type === 'sync' && job.results) {
+              await this.emailService.sendSyncReport(job.results, 'failure')
+            }
+          }
+        }
       }
       throw error
     }

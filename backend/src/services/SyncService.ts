@@ -219,11 +219,6 @@ export class SyncService {
       
       await this.recordSyncHistory(results, status);
       
-      // Only send email if this is the final batch
-      if (offset + batchSize >= results.total) {
-        await this.emailService.sendSyncReport(results, status, this.hoursSinceLastSync);
-      }
-
       return results;
 
     } catch (error) {
@@ -232,11 +227,6 @@ export class SyncService {
       results.duration_ms = endTime.getTime() - startTime.getTime();
       
       await this.recordSyncHistory(results, 'failure');
-      
-      // Only send failure email if this is the first batch
-      if (offset === 0) {
-        await this.emailService.sendSyncReport(results, 'failure', this.hoursSinceLastSync);
-      }
       
       this.logError(results, 'FATAL_ERROR', `Sync failed: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
