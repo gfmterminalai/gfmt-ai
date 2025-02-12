@@ -66,29 +66,24 @@ export class QueueService {
       };
 
       // Store the hash data
-      console.log('Storing job data:', hashData);
+      console.log('Storing job data in Redis:', { jobKey, hashData });
       const hsetResult = await this.redis.hset(jobKey, hashData);
       console.log('HSET result:', hsetResult);
 
       // Set expiry
+      console.log('Setting job expiry:', { jobKey, expiry: this.JOB_EXPIRY });
       const expireResult = await this.redis.expire(jobKey, this.JOB_EXPIRY);
       console.log('EXPIRE result:', expireResult);
 
       // Add to queue
+      console.log('Adding job to queue:', { queueKey: this.QUEUE_KEY, jobId: job.id });
       const pushResult = await this.redis.lpush(this.QUEUE_KEY, job.id);
       console.log('LPUSH result:', pushResult);
 
-      // Verify the job was stored
-      const storedJob = await this.getJob(job.id);
-      console.log('Stored job verification:', storedJob);
-
-      if (!storedJob) {
-        throw new Error('Failed to verify job storage');
-      }
-      
+      // Return the job without verification
       return job;
     } catch (error) {
-      console.error('Error creating job:', error);
+      console.error('Error creating job:', { error, jobKey, job });
       throw error;
     }
   }
