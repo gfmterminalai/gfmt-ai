@@ -34,9 +34,13 @@ export class QueueService {
     }
 
     try {
+      // Explicitly stringify the job before storing
+      const jobString = JSON.stringify(job);
+      console.log('Queueing job:', { job, jobString });
+      
       // Store job in Redis list
-      await this.redis.lpush(this.QUEUE_KEY, JSON.stringify(job));
-      console.log('Job queued:', job);
+      const result = await this.redis.lpush(this.QUEUE_KEY, jobString);
+      console.log('Job queued with result:', result);
       return job;
     } catch (error) {
       console.error('Error queuing job:', error);
@@ -47,28 +51,38 @@ export class QueueService {
   async processNextJob(): Promise<void> {
     try {
       // Get next job from queue
-      const jobData = await this.redis.rpop(this.QUEUE_KEY);
-      if (!jobData) {
+      const jobString = await this.redis.rpop(this.QUEUE_KEY);
+      if (!jobString) {
         console.log('No jobs in queue');
         return;
       }
 
+      console.log('Retrieved job string from queue:', jobString);
+
       // Parse job data
-      const job = JSON.parse(jobData) as QueueJob;
-      console.log('Processing job:', job);
+      let job: QueueJob;
+      try {
+        job = JSON.parse(jobString);
+        console.log('Parsed job data:', job);
+      } catch (parseError) {
+        console.error('Failed to parse job data:', { jobString, error: parseError });
+        return;
+      }
 
       try {
         // Run sync
+        console.log('Starting sync for job:', job.id);
         const results = await this.syncService.sync();
+        console.log('Sync completed with results:', results);
         
         // Send email
         const status = results.errors === 0 ? 'success' : 
           results.processed > 0 ? 'partial_success' : 'failure';
         await this.emailService.sendSyncReport(results, status);
         
-        console.log('Job completed successfully');
+        console.log('Job completed successfully:', job.id);
       } catch (error) {
-        console.error('Error processing job:', error);
+        console.error('Error processing job:', { jobId: job.id, error });
         // Even if job fails, we don't requeue - the next cron run will create a new job
       }
     } catch (error) {
