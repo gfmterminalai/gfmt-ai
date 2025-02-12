@@ -6,7 +6,16 @@
   }],
   "functions": {
     "api/sync.ts": {
-      "maxDuration": 60
+      "maxDuration": 10
+    },
+    "api/sync-batch.ts": {
+      "maxDuration": 300
+    },
+    "api/worker.ts": {
+      "maxDuration": 300
+    },
+    "api/job-status.ts": {
+      "maxDuration": 10
     }
   },
   "buildCommand": "rm -rf node_modules && npm install --legacy-peer-deps && npm run build",

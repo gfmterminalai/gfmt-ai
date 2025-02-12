@@ -39,14 +39,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: 'Sync history not found' });
     }
 
-    // Don't process if sync is not in progress
-    if (syncHistory.status !== 'processing') {
-      return res.status(409).json({
-        error: 'Sync is not in progress',
-        status: syncHistory.status
-      });
-    }
-
     const results = await syncService.syncBatch(BATCH_SIZE, syncHistory.campaigns_processed);
 
     // Update sync history
@@ -61,7 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         skipped: syncHistory.skipped + results.skipped,
         duration_ms: syncHistory.duration_ms + results.duration_ms,
         end_time: results.end_time,
-        status: results.processed >= results.total ? 'completed' : 'processing',
+        status: results.processed >= results.total ? 'success' : syncHistory.status,
         error_details: [
           ...(syncHistory.error_details || []),
           ...results.error_details
@@ -95,7 +87,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await db.supabase
         .from('sync_history')
         .update({
-          status: 'error',
+          status: 'failed',
           error_details: [{
             type: 'BATCH_ERROR',
             message: error instanceof Error ? error.message : String(error),
