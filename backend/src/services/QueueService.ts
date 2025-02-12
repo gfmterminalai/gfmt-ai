@@ -36,7 +36,7 @@ export class QueueService {
   }
 
   private getJobKey(jobId: string): string {
-    return `${this.JOB_PREFIX}${jobId}`
+    return `${this.JOB_PREFIX}${jobId}`;
   }
 
   private async createJob(type: QueueJob['type'], params: Record<string, any>): Promise<QueueJob> {
@@ -54,20 +54,26 @@ export class QueueService {
     console.log('Creating job:', { jobKey, job });
     
     try {
-      // Store job data
-      const jobData = JSON.stringify(job)
-      const setResult = await this.redis.set(jobKey, jobData)
-      console.log('Job data stored in Redis:', setResult);
+      // Store each field separately in a hash, ensuring proper JSON serialization
+      const hashData: Record<string, string> = {
+        id: job.id,
+        type: job.type,
+        status: job.status,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+        attempts: (job.attempts || 0).toString(),
+        params: JSON.stringify(job.params)
+      };
+
+      // Store the hash data
+      const pipeline = this.redis.pipeline();
+      pipeline.hset(jobKey, hashData);
+      pipeline.expire(jobKey, this.JOB_EXPIRY);
+      pipeline.lpush(this.QUEUE_KEY, job.id);
       
-      // Set expiry
-      const expireResult = await this.redis.expire(jobKey, this.JOB_EXPIRY)
-      console.log('Job expiry set:', expireResult);
+      const results = await pipeline.exec();
+      console.log('Job creation results:', results);
       
-      // Add to queue
-      const queueResult = await this.redis.lpush(this.QUEUE_KEY, job.id)
-      console.log('Job added to queue:', queueResult);
-      
-      // Return job without verification
       return job;
     } catch (error) {
       console.error('Error creating job:', error);
@@ -80,20 +86,32 @@ export class QueueService {
     const jobKey = this.getJobKey(jobId);
     
     try {
-      const data = await this.redis.get(jobKey)
-      console.log('Redis get result:', data);
+      const hashData = await this.redis.hgetall(jobKey) as Record<string, string>;
+      console.log('Raw Redis data:', hashData);
       
-      if (!data) {
+      if (!hashData || Object.keys(hashData).length === 0) {
         console.log('No job found for key:', jobKey);
         return null;
       }
-      
-      const job = JSON.parse(data as string) as QueueJob;
-      console.log('Parsed job:', job);
+
+      // Parse the job data, handling each field appropriately
+      const job: QueueJob = {
+        id: hashData.id || '',
+        type: (hashData.type || 'sync') as 'sync' | 'sync-batch',
+        status: (hashData.status || 'pending') as QueueJob['status'],
+        createdAt: hashData.createdAt || new Date().toISOString(),
+        updatedAt: hashData.updatedAt || new Date().toISOString(),
+        attempts: parseInt(hashData.attempts || '0', 10),
+        params: hashData.params ? JSON.parse(hashData.params) : {},
+        error: hashData.error,
+        results: hashData.results ? JSON.parse(hashData.results) : undefined
+      };
+
+      console.log('Parsed job data:', job);
       return job;
     } catch (error) {
-      console.error('Error getting job:', { error, jobId, jobKey })
-      return null
+      console.error('Error getting job:', { error, jobId, jobKey });
+      return null;
     }
   }
 
@@ -103,26 +121,45 @@ export class QueueService {
     
     try {
       // Get current job data
-      const currentJob = await this.getJob(jobId)
+      const currentJob = await this.getJob(jobId);
       if (!currentJob) {
         console.log('No job found to update');
         return;
       }
 
-      // Update job data
+      // Prepare the update data
       const updatedJob = {
         ...currentJob,
         ...updates,
         updatedAt: new Date().toISOString()
+      };
+
+      // Convert job data to hash format with proper serialization
+      const hashData: Record<string, string> = {
+        id: updatedJob.id,
+        type: updatedJob.type,
+        status: updatedJob.status,
+        createdAt: updatedJob.createdAt,
+        updatedAt: updatedJob.updatedAt,
+        attempts: (updatedJob.attempts || 0).toString(),
+        params: JSON.stringify(updatedJob.params)
+      };
+
+      if (updatedJob.error) {
+        hashData.error = updatedJob.error;
       }
 
-      // Store updated job
-      const setResult = await this.redis.set(jobKey, JSON.stringify(updatedJob))
-      console.log('Job updated in Redis:', setResult);
+      if (updatedJob.results) {
+        hashData.results = JSON.stringify(updatedJob.results);
+      }
+
+      // Update the hash and reset expiry
+      const pipeline = this.redis.pipeline();
+      pipeline.hset(jobKey, hashData);
+      pipeline.expire(jobKey, this.JOB_EXPIRY);
       
-      // Reset expiry
-      const expireResult = await this.redis.expire(jobKey, this.JOB_EXPIRY)
-      console.log('Job expiry updated:', expireResult);
+      const results = await pipeline.exec();
+      console.log('Job update results:', results);
     } catch (error) {
       console.error('Error updating job:', { error, jobId, jobKey });
       throw error;
