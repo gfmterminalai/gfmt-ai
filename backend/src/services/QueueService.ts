@@ -54,7 +54,7 @@ export class QueueService {
     console.log('Creating job:', { jobKey, job });
     
     try {
-      // Store each field separately in a hash, ensuring proper JSON serialization
+      // First, store the job data
       const hashData: Record<string, string> = {
         id: job.id,
         type: job.type,
@@ -66,13 +66,25 @@ export class QueueService {
       };
 
       // Store the hash data
-      const pipeline = this.redis.pipeline();
-      pipeline.hset(jobKey, hashData);
-      pipeline.expire(jobKey, this.JOB_EXPIRY);
-      pipeline.lpush(this.QUEUE_KEY, job.id);
-      
-      const results = await pipeline.exec();
-      console.log('Job creation results:', results);
+      console.log('Storing job data:', hashData);
+      const hsetResult = await this.redis.hset(jobKey, hashData);
+      console.log('HSET result:', hsetResult);
+
+      // Set expiry
+      const expireResult = await this.redis.expire(jobKey, this.JOB_EXPIRY);
+      console.log('EXPIRE result:', expireResult);
+
+      // Add to queue
+      const pushResult = await this.redis.lpush(this.QUEUE_KEY, job.id);
+      console.log('LPUSH result:', pushResult);
+
+      // Verify the job was stored
+      const storedJob = await this.getJob(job.id);
+      console.log('Stored job verification:', storedJob);
+
+      if (!storedJob) {
+        throw new Error('Failed to verify job storage');
+      }
       
       return job;
     } catch (error) {
@@ -86,6 +98,7 @@ export class QueueService {
     const jobKey = this.getJobKey(jobId);
     
     try {
+      console.log('Fetching job data from Redis key:', jobKey);
       const hashData = await this.redis.hgetall(jobKey) as Record<string, string>;
       console.log('Raw Redis data:', hashData);
       
@@ -153,13 +166,18 @@ export class QueueService {
         hashData.results = JSON.stringify(updatedJob.results);
       }
 
-      // Update the hash and reset expiry
-      const pipeline = this.redis.pipeline();
-      pipeline.hset(jobKey, hashData);
-      pipeline.expire(jobKey, this.JOB_EXPIRY);
-      
-      const results = await pipeline.exec();
-      console.log('Job update results:', results);
+      // Update the hash
+      console.log('Updating job data:', hashData);
+      const hsetResult = await this.redis.hset(jobKey, hashData);
+      console.log('HSET result:', hsetResult);
+
+      // Reset expiry
+      const expireResult = await this.redis.expire(jobKey, this.JOB_EXPIRY);
+      console.log('EXPIRE result:', expireResult);
+
+      // Verify the update
+      const verifiedJob = await this.getJob(jobId);
+      console.log('Update verification:', verifiedJob);
     } catch (error) {
       console.error('Error updating job:', { error, jobId, jobKey });
       throw error;
