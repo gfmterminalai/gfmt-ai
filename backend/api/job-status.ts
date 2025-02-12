@@ -27,29 +27,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     console.log('Checking status for job:', jobId);
     const queueService = new QueueService();
-    
-    // Get the actual Redis key that will be used
-    const jobKey = `gfm:job:${jobId}`;
-    console.log('Full Redis key:', jobKey);
-    
-    const job = await queueService.getJob(jobId);
-    console.log('Job data from Redis:', job);
-
-    if (!job) {
-      console.log('No job found with key:', jobKey);
-      res.status(404).json({ error: 'Job not found' });
-      return;
-    }
+    const status = await queueService.getJobStatus(jobId);
 
     res.status(200).json({
       success: true,
       job: {
-        id: job.id,
-        type: job.type,
-        status: job.status,
-        createdAt: job.createdAt,
-        updatedAt: job.updatedAt,
-        error: job.error
+        id: jobId,
+        status
       }
     });
   } catch (error) {
