@@ -237,4 +237,142 @@ export class SyncService {
   async sync(): Promise<SyncResults> {
     return this.syncBatch(5, 0);
   }
+
+  async getUrlsToProcess(): Promise<string[]> {
+    try {
+      // Get all campaign URLs
+      const campaignUrls = await this.firecrawl.mapWebsite();
+      console.log('Found', campaignUrls.length, 'URLs to check');
+      
+      // Extract contract addresses from URLs and validate them
+      const websiteAddresses = campaignUrls
+        .map(url => {
+          const match = url.match(/campaigns\/([^\/]+)/);
+          return match ? {
+            address: match[1],
+            url
+          } : null;
+        })
+        .filter((item): item is { address: string, url: string } => {
+          if (!item) return false;
+          // Validate that it looks like a Solana address (base58, ~32-44 chars)
+          const isValidAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(item.address);
+          if (!isValidAddress) {
+            console.log('Skipping invalid address:', item.address);
+          }
+          return isValidAddress;
+        })
+        .sort((a, b) => a.address.localeCompare(b.address));
+      
+      console.log('Found', websiteAddresses.length, 'valid campaign addresses');
+      
+      // Get existing campaigns from database
+      const { data: existingCampaigns, error: dbError } = await this.supabase
+        .from('meme_coins')
+        .select('contract_address');
+      
+      if (dbError) {
+        throw dbError;
+      }
+
+      const existingAddresses = new Set(existingCampaigns?.map(c => c.contract_address));
+      
+      // Return only URLs for new campaigns
+      const newUrls = websiteAddresses
+        .filter(item => !existingAddresses.has(item.address))
+        .map(item => item.url);
+
+      console.log('Found', newUrls.length, 'new campaigns to process');
+      return newUrls;
+    } catch (error) {
+      console.error('Error getting URLs to process:', error);
+      throw error;
+    }
+  }
+
+  async syncUrl(url: string): Promise<SyncResults> {
+    const startTime = new Date();
+    const results: SyncResults = {
+      processed: 0,
+      added: 0,
+      errors: 0,
+      skipped: 0,
+      distributions_added: 0,
+      distributions_updated: 0,
+      start_time: startTime.toISOString(),
+      end_time: '',
+      duration_ms: 0,
+      error_details: [],
+      total: 1
+    };
+
+    try {
+      // Extract data for single URL
+      const extraction = await this.firecrawl.extractFromUrl(url);
+      
+      if (!extraction.json.contract_address) {
+        results.skipped++;
+        return results;
+      }
+
+      // Insert new meme coin
+      const { error: insertError } = await this.supabase
+        .from('meme_coins')
+        .insert({
+          contract_address: extraction.json.contract_address,
+          developer_address: extraction.json.developer_address,
+          ticker: extraction.json.ticker,
+          supply: extraction.json.supply,
+          market_cap_on_launch: extraction.json.market_cap_on_launch,
+          created_at: extraction.json.created_at
+        });
+
+      if (insertError) {
+        this.logError(results, 'INSERT_ERROR', `Failed to insert campaign ${extraction.json.contract_address}: ${insertError.message}`);
+        return results;
+      }
+
+      results.added++;
+
+      // Insert token distributions
+      const combinedDistributions = new Map<string, number>();
+      extraction.json.token_distribution?.forEach(dist => {
+        if (dist.entity && dist.percentage) {
+          const currentTotal = combinedDistributions.get(dist.entity) || 0;
+          combinedDistributions.set(dist.entity, currentTotal + dist.percentage);
+        }
+      });
+
+      for (const [entity, percentage] of combinedDistributions.entries()) {
+        const { error: distError } = await this.supabase
+          .from('token_distributions')
+          .insert({
+            contract_address: extraction.json.contract_address,
+            entity,
+            percentage
+          });
+
+        if (distError) {
+          this.logError(results, 'DISTRIBUTION_ERROR', `Failed to insert distribution for ${extraction.json.contract_address} (${entity}): ${distError.message}`);
+        } else {
+          results.distributions_added++;
+        }
+      }
+
+      results.processed++;
+      
+      const endTime = new Date();
+      results.end_time = endTime.toISOString();
+      results.duration_ms = endTime.getTime() - startTime.getTime();
+
+      return results;
+    } catch (error) {
+      const endTime = new Date();
+      results.end_time = endTime.toISOString();
+      results.duration_ms = endTime.getTime() - startTime.getTime();
+      
+      this.logError(results, 'URL_SYNC_ERROR', `Failed to sync URL ${url}: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
+  }
 } 

@@ -17,7 +17,8 @@
     "cron": "ts-node src/scripts/cron.ts",
     "test": "jest --config jest.config.ts --testPathPattern=src/__tests__",
     "test:watch": "jest --watch --config jest.config.ts --testPathPattern=src/__tests__",
-    "test:coverage": "jest --coverage --config jest.config.ts --testPathPattern=src/__tests__"
+    "test:coverage": "jest --coverage --config jest.config.ts --testPathPattern=src/__tests__",
+    "test:sync": "ts-node src/scripts/test-sync.ts"
   },
   "dependencies": {
     "@mendable/firecrawl-js": "1.16.0",

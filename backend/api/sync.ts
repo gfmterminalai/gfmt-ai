@@ -76,9 +76,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('[5] Queueing sync job...');
     const job = await queueService.queueSync();
 
-    // Trigger the worker asynchronously without waiting
+    // Trigger worker via HTTP to ensure it runs in a separate process
     console.log('[6] Triggering worker process...');
-    queueService.processNextJob().catch(error => {
+    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
+    fetch(`${baseUrl}/api/worker?token=${token}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    }).catch(error => {
       console.error('[6a] Error triggering worker:', error);
     });
 
