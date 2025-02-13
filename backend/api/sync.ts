@@ -76,15 +76,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('[5] Queueing sync job...');
     const job = await queueService.queueSync();
 
-    // Start processing the job
+    // Trigger the worker asynchronously without waiting
+    console.log('[6] Triggering worker process...');
     queueService.processNextJob().catch(error => {
-      console.error('[6] Error processing job:', error);
+      console.error('[6a] Error triggering worker:', error);
     });
 
-    res.status(200).json({
+    // Return immediately with job ID
+    res.status(202).json({
       success: true,
-      message: 'Sync job queued',
-      jobId: job.id
+      message: 'Sync job queued and processing started',
+      jobId: job.id,
+      statusEndpoint: `/api/job-status?jobId=${job.id}`
     });
   } catch (error) {
     console.error('[7] Sync endpoint error:', error);
