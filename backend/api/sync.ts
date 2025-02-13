@@ -3,19 +3,21 @@ import { DatabaseAdapter } from '../src/core/database';
 import { QueueService } from '../src/services/QueueService';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Only allow POST requests
-  if (req.method !== 'POST') {
+  // Allow both POST requests and GET requests from Vercel cron
+  const isCronRequest = req.headers['x-vercel-cron'] === '1';
+  if (req.method !== 'POST' && !(req.method === 'GET' && isCronRequest)) {
     res.status(405).json({ error: 'Method not allowed' });
     return;
   }
 
   // Get token from Authorization header or query parameter
+  // For cron requests, skip token validation as they're authenticated by Vercel
   const authHeader = req.headers.authorization;
   const headerToken = authHeader?.split(' ')[1];
   const queryToken = req.query.token as string;
   const token = headerToken || queryToken;
   
-  if (!token || token !== process.env.VERCEL_AUTH_TOKEN) {
+  if (!isCronRequest && (!token || token !== process.env.VERCEL_AUTH_TOKEN)) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
