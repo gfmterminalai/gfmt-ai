@@ -26,6 +26,10 @@ export class QueueService {
     this.emailService = new EmailService()
   }
 
+  private async getQueueLength(): Promise<number> {
+    return this.redis.llen(this.QUEUE_KEY);
+  }
+
   async queueSync(): Promise<QueueJob> {
     const job: QueueJob = {
       id: `sync-${Date.now()}`,
@@ -34,6 +38,10 @@ export class QueueService {
     }
 
     try {
+      // Log queue state before
+      const beforeLength = await this.getQueueLength();
+      console.log('Queue length before push:', beforeLength);
+
       // Convert job to string before storing
       const jobString = JSON.stringify(job);
       console.log('Queueing job as string:', jobString);
@@ -46,6 +54,10 @@ export class QueueService {
       const stored = await this.redis.lindex(this.QUEUE_KEY, 0);
       console.log('Verified stored job:', stored);
 
+      // Log queue state after
+      const afterLength = await this.getQueueLength();
+      console.log('Queue length after push:', afterLength);
+
       return job;
     } catch (error) {
       console.error('Error queuing job:', error);
@@ -55,12 +67,25 @@ export class QueueService {
 
   async processNextJob(): Promise<void> {
     try {
+      // Check queue length before processing
+      const beforeLength = await this.getQueueLength();
+      console.log('Queue length before processing:', beforeLength);
+
+      if (beforeLength === 0) {
+        console.log('Queue is empty, nothing to process');
+        return;
+      }
+
       // Get next job from queue
       const jobData = await this.redis.rpop(this.QUEUE_KEY);
       if (!jobData) {
-        console.log('No jobs in queue');
+        console.log('No jobs in queue after pop');
         return;
       }
+
+      // Check queue length after pop
+      const afterLength = await this.getQueueLength();
+      console.log('Queue length after pop:', afterLength);
 
       console.log('Retrieved from queue (raw):', jobData);
 
