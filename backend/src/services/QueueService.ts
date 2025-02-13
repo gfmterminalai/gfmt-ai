@@ -26,10 +26,6 @@ export class QueueService {
     this.emailService = new EmailService()
   }
 
-  private async getQueueLength(): Promise<number> {
-    return this.redis.llen(this.QUEUE_KEY);
-  }
-
   async queueSync(): Promise<QueueJob> {
     const job: QueueJob = {
       id: `sync-${Date.now()}`,
@@ -38,25 +34,18 @@ export class QueueService {
     }
 
     try {
-      // Log queue state before
-      const beforeLength = await this.getQueueLength();
-      console.log('Queue length before push:', beforeLength);
-
       // Convert job to string before storing
       const jobString = JSON.stringify(job);
       console.log('Queueing job as string:', jobString);
       
       // Store job string in Redis list
-      const result = await this.redis.lpush(this.QUEUE_KEY, jobString);
-      console.log('Job queued with result:', result);
+      await this.redis.lpush(this.QUEUE_KEY, jobString);
+      const queueLength = await this.redis.llen(this.QUEUE_KEY);
+      console.log('Job queued, queue length:', queueLength);
 
       // Verify what was stored
       const stored = await this.redis.lindex(this.QUEUE_KEY, 0);
       console.log('Verified stored job:', stored);
-
-      // Log queue state after
-      const afterLength = await this.getQueueLength();
-      console.log('Queue length after push:', afterLength);
 
       return job;
     } catch (error) {
@@ -67,25 +56,14 @@ export class QueueService {
 
   async processNextJob(): Promise<void> {
     try {
-      // Check queue length before processing
-      const beforeLength = await this.getQueueLength();
-      console.log('Queue length before processing:', beforeLength);
-
-      if (beforeLength === 0) {
-        console.log('Queue is empty, nothing to process');
-        return;
-      }
-
       // Get next job from queue
+      console.log('Attempting to process next job...');
       const jobData = await this.redis.rpop(this.QUEUE_KEY);
+      
       if (!jobData) {
-        console.log('No jobs in queue after pop');
+        console.log('No jobs in queue');
         return;
       }
-
-      // Check queue length after pop
-      const afterLength = await this.getQueueLength();
-      console.log('Queue length after pop:', afterLength);
 
       console.log('Retrieved from queue (raw):', jobData);
 
@@ -133,6 +111,9 @@ export class QueueService {
           jobId: job.id, 
           errorMessage: error instanceof Error ? error.message : String(error)
         });
+        // If processing fails, push the job back to the front of the queue
+        const jobString = JSON.stringify(job);
+        await this.redis.lpush(this.QUEUE_KEY, jobString);
       }
     } catch (error) {
       console.error('Error in processNextJob:', {
@@ -143,8 +124,6 @@ export class QueueService {
   }
 
   async getJobStatus(jobId: string): Promise<string> {
-    // For simplicity, we don't track individual job status
-    // Just return 'completed' since the job is processed immediately
     return 'completed';
   }
 } 
