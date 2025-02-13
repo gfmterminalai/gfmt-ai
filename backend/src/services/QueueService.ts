@@ -34,13 +34,18 @@ export class QueueService {
     }
 
     try {
-      // Explicitly stringify the job before storing
+      // Convert job to string before storing
       const jobString = JSON.stringify(job);
-      console.log('Queueing job:', { job, jobString });
+      console.log('Queueing job as string:', jobString);
       
-      // Store job in Redis list
+      // Store job string in Redis list
       const result = await this.redis.lpush(this.QUEUE_KEY, jobString);
       console.log('Job queued with result:', result);
+
+      // Verify what was stored
+      const stored = await this.redis.lindex(this.QUEUE_KEY, 0);
+      console.log('Verified stored job:', stored);
+
       return job;
     } catch (error) {
       console.error('Error queuing job:', error);
@@ -51,21 +56,38 @@ export class QueueService {
   async processNextJob(): Promise<void> {
     try {
       // Get next job from queue
-      const jobString = await this.redis.rpop(this.QUEUE_KEY);
-      if (!jobString) {
+      const jobData = await this.redis.rpop(this.QUEUE_KEY);
+      if (!jobData) {
         console.log('No jobs in queue');
         return;
       }
 
-      console.log('Retrieved job string from queue:', jobString);
+      console.log('Retrieved from queue (raw):', jobData);
 
-      // Parse job data
+      // Handle both string and object responses
       let job: QueueJob;
       try {
-        job = JSON.parse(jobString);
-        console.log('Parsed job data:', job);
+        if (typeof jobData === 'string') {
+          job = JSON.parse(jobData);
+        } else if (typeof jobData === 'object' && jobData !== null) {
+          // If Redis returned an object directly, use it
+          job = jobData as QueueJob;
+        } else {
+          console.error('Invalid job data type:', typeof jobData);
+          return;
+        }
+        console.log('Job data:', job);
       } catch (parseError) {
-        console.error('Failed to parse job data:', { jobString, error: parseError });
+        console.error('Failed to process job data:', { 
+          jobData,
+          errorMessage: parseError instanceof Error ? parseError.message : String(parseError)
+        });
+        return;
+      }
+
+      // Validate job structure
+      if (!job.id || !job.type || !job.status) {
+        console.error('Invalid job structure:', job);
         return;
       }
 
@@ -82,11 +104,16 @@ export class QueueService {
         
         console.log('Job completed successfully:', job.id);
       } catch (error) {
-        console.error('Error processing job:', { jobId: job.id, error });
-        // Even if job fails, we don't requeue - the next cron run will create a new job
+        console.error('Error processing job:', { 
+          jobId: job.id, 
+          errorMessage: error instanceof Error ? error.message : String(error)
+        });
       }
     } catch (error) {
-      console.error('Error in processNextJob:', error);
+      console.error('Error in processNextJob:', {
+        errorMessage: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
     }
   }
 
