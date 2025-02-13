@@ -14,7 +14,10 @@ export interface QueueJob {
   parent_job_id?: string
   urls_total?: number
   urls_processed?: number
-  queued_at?: string
+  queued_at: string
+  completed_at?: string
+  processing_started_at?: string
+  failed_at?: string
 }
 
 export class QueueService {
@@ -50,6 +53,33 @@ export class QueueService {
 
       console.log(`[Queue] Found ${urls.length} URLs to process`);
       
+      // If no URLs to process, complete the job immediately
+      if (urls.length === 0) {
+        parentJob.status = 'completed';
+        parentJob.completed_at = new Date().toISOString();
+        
+        const results = {
+          processed: 0,
+          added: 0,
+          errors: 0,
+          skipped: 0,
+          distributions_added: 0,
+          distributions_updated: 0,
+          start_time: parentJob.queued_at,
+          end_time: parentJob.completed_at,
+          duration_ms: new Date(parentJob.completed_at).getTime() - new Date(parentJob.queued_at).getTime(),
+          error_details: [],
+          total: 0
+        };
+
+        // Send email for no new campaigns
+        await this.emailService.sendSyncReport(results, 'success');
+        
+        // Store completed parent job
+        await this.redis.set(`job:${parentJob.id}`, JSON.stringify(parentJob));
+        return parentJob;
+      }
+      
       // Store parent job
       const parentJobString = JSON.stringify(parentJob);
       await this.redis.set(`job:${parentJob.id}`, parentJobString);
@@ -66,7 +96,8 @@ export class QueueService {
             type: 'url_sync',
             status: 'pending',
             url,
-            parent_job_id: parentJob.id
+            parent_job_id: parentJob.id,
+            queued_at: new Date().toISOString()
           };
           
           const jobString = JSON.stringify(urlJob);
